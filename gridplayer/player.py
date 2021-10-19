@@ -5,12 +5,12 @@ import os
 
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QEvent, QMimeData, QSize, Qt
-from PyQt5.QtGui import QDrag, QFont, QInputEvent
+from PyQt5.QtGui import QDrag, QFont, QIcon, QInputEvent
 from PyQt5.QtWidgets import QApplication, QFileDialog, QLabel, QMessageBox
 
-from gridplayer.dialogs.messagebox import QCustomMessageBox
-from gridplayer.utils import keepawake, log_config
 from gridplayer.dialogs.about import AboutDialog
+from gridplayer.dialogs.messagebox import QCustomMessageBox
+from gridplayer.dialogs.settings import SettingsDialog
 from gridplayer.params import PlaylistParams
 from gridplayer.params_static import (
     SUPPORTED_VIDEO_EXT,
@@ -19,12 +19,13 @@ from gridplayer.params_static import (
     WindowState,
 )
 from gridplayer.player_menu import PlayerMenu
-from gridplayer.playlist import read_playlist, save_playlist, dumps_playlist
+from gridplayer.playlist import dumps_playlist, read_playlist, save_playlist
 from gridplayer.settings import settings
-from gridplayer.dialogs.settings import SettingsDialog
-from gridplayer.video_frame_vlc_base import ProcessManagerVLC
+from gridplayer.utils import keepawake, log_config
+from gridplayer.utils.darkmode import is_dark_mode
 from gridplayer.video_block import VideoBlock
 from gridplayer.video_frame_dummy import VideoFrameDummy
+from gridplayer.video_frame_vlc_base import ProcessManagerVLC
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,13 @@ class Player(QtWidgets.QWidget):
             self.mouse_reset()
 
             self.cmd_active("show_overlay")
+
+        # detect theme switches
+        if event.type() == QEvent.PaletteChange:
+            if is_dark_mode():
+                QIcon.setThemeName("dark")
+            else:
+                QIcon.setThemeName("light")
 
         return super().event(event)
 
@@ -737,7 +745,11 @@ class Player(QtWidgets.QWidget):
                 self.is_screensaver_off = False
 
     def is_reload_needed(self, previous_settings):
-        checks = ("player/video_driver", "player/video_driver_players")
+        checks = (
+            "player/video_driver",
+            "player/video_driver_players",
+            "internal/opaque_hw_overlay",
+        )
 
         changes = {k: previous_settings[k] != settings.get(k) for k in checks}
 
@@ -750,6 +762,9 @@ class Player(QtWidgets.QWidget):
         )
 
         if changes["player/video_driver_players"] and is_current_engine_multiproc:
+            return True
+
+        if changes["internal/opaque_hw_overlay"]:
             return True
 
         return False
@@ -790,7 +805,9 @@ class Player(QtWidgets.QWidget):
         if self.saved_playlist is not None:
             save_path = self.saved_playlist["path"]
         else:
-            save_path = os.path.join(QtCore.QDir.currentPath(), "Untitled.gpls")
+            save_path = os.path.join(QtCore.QDir.homePath(), "Untitled.gpls")
+
+        logger.debug(f"Proposed playlist save path: {save_path}")
 
         with ModalWindow(self):
             file_path = QtWidgets.QFileDialog.getSaveFileName(
@@ -800,8 +817,21 @@ class Player(QtWidgets.QWidget):
         if file_path[0]:
             file_path = os.path.abspath(file_path[0])
 
-            # if not file_path.endswith(".gpls"):
-            #     file_path += ".gpls"
+            # filename placeholder is not available if file doesn't exist
+            # problematic for new playlists, need to prevent accidental overwrite
+            # occurs in Flatpak, maybe in other sandboxes that use portal
+            if not file_path.endswith(".gpls"):
+                file_path += ".gpls"
+
+                if os.path.isfile(file_path):
+                    file = os.path.basename(file_path)
+                    with ModalWindow(self):
+                        ret = QCustomMessageBox.question(
+                            self, "Playlist", f"Do you want to overwrite {file}?"
+                        )
+
+                    if ret != QMessageBox.Yes:
+                        return
 
             save_playlist(file_path, playlist)
 
