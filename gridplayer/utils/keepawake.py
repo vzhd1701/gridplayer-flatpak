@@ -7,7 +7,7 @@ SYSTEM = platform.system()
 
 logger = logging.getLogger(__name__)
 
-if SYSTEM == "Windows":
+if SYSTEM == "Windows":  # noqa: C901
     import ctypes
 
     SetThreadExecutionState = ctypes.windll.kernel32.SetThreadExecutionState
@@ -19,44 +19,48 @@ if SYSTEM == "Windows":
 
     SPI_SETSCREENSAVEACTIVE = 0x0011
 
-    def keepawake_on():
-        logger.debug("Inhibiting screensaver")
+    class KeepAwake(object):
+        def __init__(self):
+            self.is_screensaver_off = False
 
-        flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
-        SetThreadExecutionState(flags)
+        def screensaver_off(self):
+            if self.is_screensaver_off:
+                return
 
-        res = SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 0, None, 0)
+            logger.debug("Inhibiting screensaver")
 
-        if res != 1:
-            logger.warning(f"ON - SystemParametersInfo failed")
+            flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+            SetThreadExecutionState(flags)
 
-    def keepawake_off():
-        logger.debug("UnInhibiting screensaver")
+            res = SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 0, None, 0)
 
-        SetThreadExecutionState(ES_CONTINUOUS)
+            if res != 1:
+                logger.warning("ON - SystemParametersInfo failed")
 
-        res = SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 1, None, 0)
+            self.is_screensaver_off = True
 
-        if res != 1:
-            logger.warning(f"OFF - SystemParametersInfo failed")
+        def screensaver_on(self):
+            if not self.is_screensaver_off:
+                return
+
+            logger.debug("UnInhibiting screensaver")
+
+            SetThreadExecutionState(ES_CONTINUOUS)
+
+            res = SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 1, None, 0)
+
+            if res != 1:
+                logger.warning("OFF - SystemParametersInfo failed")
+
+            self.is_screensaver_off = False
 
 
 elif SYSTEM == "Linux":
     from PyQt5.QtCore import QMetaType
     from PyQt5.QtDBus import QDBusArgument, QDBusConnection, QDBusInterface
 
-    _dbus_cookie = None
-
-    def dbus_screensaver_set(is_inhibit):
-        global _dbus_cookie
-
-        bus = QDBusConnection.sessionBus()
-
-        if not bus.isConnected():
-            logger.warning(f"DBus is not connected")
-            return
-
-        services = (
+    class KeepAwake(object):
+        _services = (
             ("org.freedesktop.ScreenSaver", "/ScreenSaver"),
             (
                 "org.freedesktop.PowerManagement.Inhibit",
@@ -66,66 +70,140 @@ elif SYSTEM == "Linux":
             ("org.gnome.SessionManager", "/org/gnome/SessionManager"),
         )
 
-        for s_name, s_path in services:
-            screensaver_if = QDBusInterface(s_name, s_path, s_name, bus)
+        def __init__(self):
+            self.is_screensaver_off = False
 
-            if not screensaver_if.isValid():
-                logger.debug(f"DBus interface {s_name} is not valid")
-                continue
+            self._dbus_cookie = None
 
-            if is_inhibit:
-                reply = screensaver_if.call("Inhibit", __app_name__, "Playing media.")
-            else:
-                if _dbus_cookie is None:
-                    logger.warning(f"DBus Cookie is empty")
-                    break
+            try:
+                self._screensaver_if = self._dbus_get_interface()
+            except ValueError:
+                self._screensaver_if = None
 
-                uint_dbus_cookie = QDBusArgument()
-                uint_dbus_cookie.add(_dbus_cookie, QMetaType.UInt)
-                reply = screensaver_if.call("UnInhibit", uint_dbus_cookie)
+        def screensaver_off(self):
+            if self.is_screensaver_off:
+                return
 
-            error = reply.errorName()
+            logger.debug("Inhibiting screensaver")
 
-            if not error:
-                _dbus_cookie = reply.arguments()[0]
-                logger.debug(f"New DBus Cookie: {_dbus_cookie}")
-            else:
-                logger.debug(f"Error: {error}")
-                logger.debug(f"Error: {reply.errorMessage()}")
+            if self._screensaver_if is None:
+                logger.warning("DBus interface is not initialized")
+                return
 
-            break
+            reply = self._dbus_call("Inhibit", __app_name__, "Playing media.")
 
-    def keepawake_on():
-        logger.debug("Inhibiting screensaver")
-        dbus_screensaver_set(True)
+            self._dbus_cookie = reply[0]
+            logger.debug(f"New DBus Cookie: {self._dbus_cookie}")
 
-    def keepawake_off():
-        logger.debug("UnInhibiting screensaver")
-        dbus_screensaver_set(False)
+            self.is_screensaver_off = True
+
+        def screensaver_on(self):
+            if not self.is_screensaver_off:
+                return
+
+            logger.debug("UnInhibiting screensaver")
+
+            if self._screensaver_if is None:
+                logger.warning("DBus interface is not initialized")
+                return
+
+            if self._dbus_cookie is None:
+                logger.warning("DBus Cookie is empty")
+                return
+
+            uint_dbus_cookie = QDBusArgument()
+            uint_dbus_cookie.add(self._dbus_cookie, QMetaType.UInt)
+
+            self._dbus_call("UnInhibit", uint_dbus_cookie)
+
+            self._dbus_cookie = None
+
+            self.is_screensaver_off = False
+
+        def _dbus_call(self, *args):
+            reply = self._screensaver_if.call(*args)
+
+            if reply.errorName():
+                logger.debug(f"DBUS Error: {reply.errorName()}")
+                logger.debug(f"DBUS Error Message: {reply.errorMessage()}")
+
+            return reply.arguments()
+
+        def _dbus_get_interface(self):
+            bus = QDBusConnection.sessionBus()
+
+            if not bus.isConnected():
+                logger.warning("DBus failed to connected")
+
+                raise ValueError
+
+            for s_name, s_path in self._services:
+                screensaver_if = QDBusInterface(s_name, s_path, s_name, bus)
+
+                if not screensaver_if.isValid():
+                    logger.debug(f"DBus interface {s_name} is not valid")
+                    continue
+
+                return screensaver_if
+
+            raise ValueError
 
 
 elif SYSTEM == "Darwin":
-    from gridplayer.utils.macos import assertNoIdleSleep, removeNoIdleSleepAssertion
+    from gridplayer.utils.keepawake_macos import (
+        assertNoIdleSleep,
+        removeNoIdleSleepAssertion,
+    )
 
-    _assertion_id = None
+    class KeepAwake(object):
+        def __init__(self):
+            self.is_screensaver_off = False
 
-    def keepawake_on():
-        logger.debug("Inhibiting screensaver")
+            self._assertion_id = None
 
-        global _assertion_id
+        def screensaver_off(self):
+            if self.is_screensaver_off:
+                return
 
-        _assertion_id = assertNoIdleSleep("Playing media")
+            logger.debug("Inhibiting screensaver")
 
-    def keepawake_off():
-        logger.debug("UnInhibiting screensaver")
+            self._assertion_id = assertNoIdleSleep("Playing media")
 
-        removeNoIdleSleepAssertion(_assertion_id)
+            self.is_screensaver_off = True
+
+        def screensaver_on(self):
+            if not self.is_screensaver_off:
+                return
+
+            logger.debug("UnInhibiting screensaver")
+
+            if self._assertion_id is None:
+                logger.warning("Assertion ID is empty")
+                return
+
+            removeNoIdleSleepAssertion(self._assertion_id)
+
+            self.is_screensaver_off = False
 
 
 else:
 
-    def keepawake_on():
-        logger.debug("Inhibiting screensaver not supported")
+    class KeepAwake(object):
+        def __init__(self):
+            self.is_screensaver_off = False
 
-    def keepawake_off():
-        logger.debug("UnInhibiting screensaver not supported")
+        def keepawake_on(self):
+            if self.is_screensaver_off:
+                return
+
+            logger.debug("Inhibiting screensaver not supported")
+
+            self.is_screensaver_off = True
+
+        def keepawake_off(self):
+            if not self.is_screensaver_off:
+                return
+
+            logger.debug("UnInhibiting screensaver not supported")
+
+            self.is_screensaver_off = False

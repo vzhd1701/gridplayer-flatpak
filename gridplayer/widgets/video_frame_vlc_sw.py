@@ -2,32 +2,40 @@ import contextlib
 import logging
 from multiprocessing import Array, Lock, Value
 
-from gridplayer.params_vlc import pre_import_embed_vlc
-
-pre_import_embed_vlc()
-import vlc
-from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QBrush, QImage, QPainter, QPixmap
-from PyQt5.QtWidgets import QFrame, QGraphicsPixmapItem, QStackedLayout
+from PyQt5.QtWidgets import (
+    QFrame,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QStackedLayout,
+    QWidget,
+)
 
-from gridplayer.params_static import VideoAspect
-from gridplayer.utils.multiprocessing import SafeSharedMemory, releasing
-from gridplayer.video_frame_vlc_base import (
+from gridplayer.multiprocess.safe_shared_memory import SafeSharedMemory, releasing
+from gridplayer.params_static import PLAYER_ID_LENGTH, VideoAspect
+from gridplayer.utils.libvlc import pre_import_embed_vlc
+from gridplayer.utils.misc import qt_connect
+from gridplayer.widgets.video_frame_vlc_base import (
     InstanceProcessVLC,
     VlcPlayerThreaded,
     VLCVideoDriverThreaded,
 )
 
+# Need to set env variables before importing vlc
+pre_import_embed_vlc()
+import vlc  # noqa: E402
 
-class ImageDecoder:
+
+class ImageDecoder(object):
     def __init__(self, shared_memory, frame_ready_cb=None):
         super().__init__()
 
         self.is_paused = True
 
-        self.lock_cb = self.get_libvlc_lock_callback()
-        self.unlock_cb = self.get_libvlc_unlock_callback()
+        self.lock_cb = self.libvlc_lock_callback()
+        self.unlock_cb = self.libvlc_unlock_callback()
 
         self._stopped = False
 
@@ -54,29 +62,25 @@ class ImageDecoder:
         media_player.video_set_callbacks(self.lock_cb, self.unlock_cb, None, None)
         media_player.video_set_format("RV32", self._width, self._height, self._row_size)
 
-    def get_libvlc_lock_callback(self):
+    def libvlc_lock_callback(self):
         @vlc.CallbackDecorators.VideoLockCb
-        def _cb(opaque, planes):
-            self._shared_memory.acquire()
-            planes[0] = self._shared_memory.get_ptr()
+        def _cb(opaque, planes):  # noqa: WPS430
+            self._shared_memory.lock.acquire()
+            planes[0] = self._shared_memory.ptr
 
         return _cb
 
-    def get_libvlc_unlock_callback(self):
+    def libvlc_unlock_callback(self):
         @vlc.CallbackDecorators.VideoUnlockCb
-        def _cb(opaque, picta, planes):
-            with releasing(self._shared_memory):
+        def _cb(opaque, picta, planes):  # noqa: WPS430
+            with releasing(self._shared_memory.lock):
                 if self._stopped:
                     return
 
                 # Callback is firing while on pause,
                 # so check if the frame content actually changed
-                if self.is_paused:
-                    new_frame_head = bytes(self._shared_memory.get_memory_buf()[:1024])
-                    if new_frame_head == self._prev_frame_head:
-                        return
-                    else:
-                        self._prev_frame_head = new_frame_head
+                if self.is_paused and self._is_frame_changed():
+                    return
 
                 self._frame_ready_cb()
 
@@ -87,39 +91,38 @@ class ImageDecoder:
 
         # make sure that memory lock released in case it was locked mid-callback
         with contextlib.suppress(ValueError):
-            self._shared_memory.release()
+            self._shared_memory.lock.release()
 
         self._shared_memory.close()
-        self._shared_memory.unlink()
+
+    def _is_frame_changed(self):
+        new_frame_head = bytes(self._shared_memory.memory.buf[:1024])
+
+        if new_frame_head == self._prev_frame_head:
+            return False
+
+        self._prev_frame_head = new_frame_head
+        return True
 
 
 class InstanceProcessVLCSW(InstanceProcessVLC):
-    def __init__(
-        self,
-        players_per_instance,
-        pm_callback_pipe,
-        pm_log_queue,
-        log_level,
-        log_level_vlc,
-    ):
-        super().__init__(
-            players_per_instance,
-            pm_callback_pipe,
-            pm_log_queue,
-            log_level,
-            log_level_vlc,
-        )
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         # shared data multiprocess
         self._memory_locks = [
-            {"lock": Lock(), "is_busy": Value("i", 0), "player_id": Array("c", 16)}
-            for _ in range(players_per_instance)
+            {
+                "lock": Lock(),
+                "is_busy": Value("i", 0),
+                "player_id": Array("c", PLAYER_ID_LENGTH * 2),
+            }
+            for _ in range(self.players_per_instance)
         ]
 
         self._vlc_options = ["--vout=vdummy"]
 
     def init_player_shared_data(self, player_id):
-        available_locks = (l for l in self._memory_locks if l["is_busy"].value == 0)
+        available_locks = (ml for ml in self._memory_locks if ml["is_busy"].value == 0)
 
         player_lock = next(available_locks)
 
@@ -136,7 +139,9 @@ class InstanceProcessVLCSW(InstanceProcessVLC):
 
     def get_player_lock(self, player_id):
         return next(
-            l for l in self._memory_locks if l["player_id"].value == player_id.encode()
+            ml
+            for ml in self._memory_locks
+            if ml["player_id"].value == player_id.encode()
         )
 
     def get_player_shared_memory(self, player_id):
@@ -147,28 +152,26 @@ class InstanceProcessVLCSW(InstanceProcessVLC):
         init_data["shared_memory"] = self.get_player_shared_memory(player_id)
 
         player = PlayerProcessSingleVLCSW(
-            player_id,
-            self._vlc_instance,
-            self.release_player,
-            init_data,
-            self.crash,
-            pipe,
+            player_id=player_id,
+            release_callback=self.release_player,
+            init_data=init_data,
+            vlc_instance=self._vlc_instance,
+            crash_func=self.crash,
+            pipe=pipe,
         )
         self._players[player_id] = player
 
 
 class PlayerProcessSingleVLCSW(VlcPlayerThreaded):
-    def __init__(
-        self, player_id, vlc_instance, release_callback, init_data, crash_func, pipe
-    ):
-        VlcPlayerThreaded.__init__(self, vlc_instance, crash_func, pipe)
+    def __init__(self, player_id, release_callback, init_data, **kwargs):
+        super().__init__(**kwargs)
 
         self.id = player_id
         self.release_callback = release_callback
 
         self.shared_memory = init_data["shared_memory"]
         self.decoder = None
-        self.media_options.append("avcodec-hw=none")
+        self._media_options.append("avcodec-hw=none")
 
         self.start()
 
@@ -194,7 +197,7 @@ class PlayerProcessSingleVLCSW(VlcPlayerThreaded):
         width, height = self.video_dimensions
 
         self.decoder.set_frame(width, height)
-        self.decoder.attach_media_player(self.media_player)
+        self.decoder.attach_media_player(self._media_player)
 
         self.cmd_send("init_frame", width, height)
 
@@ -212,11 +215,11 @@ class PlayerProcessSingleVLCSW(VlcPlayerThreaded):
 
 
 class VideoDriverVLCSW(VLCVideoDriverThreaded):
-    set_dummy_frame_sig = QtCore.pyqtSignal()
-    image_ready_sig = QtCore.pyqtSignal()
+    set_dummy_frame_sig = pyqtSignal()
+    image_ready_sig = pyqtSignal()
 
-    def __init__(self, image_dest, process_manager, parent=None):
-        VLCVideoDriverThreaded.__init__(self, parent=parent)
+    def __init__(self, image_dest, process_manager, **kwargs):
+        super().__init__(**kwargs)
 
         self._width = None
         self._height = None
@@ -226,8 +229,10 @@ class VideoDriverVLCSW(VLCVideoDriverThreaded):
 
         self._pix = None
 
-        self.set_dummy_frame_sig.connect(self.set_dummy_frame)
-        self.image_ready_sig.connect(self.image_ready)
+        qt_connect(
+            (self.set_dummy_frame_sig, self.set_dummy_frame),
+            (self.image_ready_sig, self.image_ready),
+        )
 
         self.player = process_manager.init_player({}, self.cmd_child_pipe())
 
@@ -253,12 +258,12 @@ class VideoDriverVLCSW(VLCVideoDriverThreaded):
         try:
             with self._shared_memory:
                 px = QImage(
-                    self._shared_memory.get_memory_buf(),
+                    self._shared_memory.memory.buf,
                     self._width,
                     self._height,
                     QImage.Format_RGB32,
                 )
-        except AttributeError as e:
+        except AttributeError:
             # Very rare race condition
             self.log.warning("Shared memory is cleared already")
             return
@@ -282,11 +287,13 @@ class VideoDriverVLCSW(VLCVideoDriverThreaded):
         self.player.cleanup()
 
 
-class VideoFrameVLCSW(QtWidgets.QWidget):
-    time_changed = QtCore.pyqtSignal(int)
-    video_ready = QtCore.pyqtSignal()
-    error = QtCore.pyqtSignal()
-    crash = QtCore.pyqtSignal(str)
+class VideoFrameVLCSW(QWidget):
+    time_changed = pyqtSignal(int)
+    video_ready = pyqtSignal()
+    error = pyqtSignal()
+    crash = pyqtSignal(str)
+
+    is_opengl = False
 
     def __init__(self, process_manager, parent=None):
         super().__init__(parent)
@@ -296,35 +303,39 @@ class VideoFrameVLCSW(QtWidgets.QWidget):
 
         self.is_video_initialized = False
 
-        self.setup_ui()
-
-        self.video_driver = VideoDriverVLCSW(self._videoitem, process_manager, self)
-        self.video_driver.time_changed.connect(self.time_change_emit)
-        self.video_driver.load_finished.connect(self.load_video_finish)
-        self.video_driver.error.connect(self.error_state)
-        self.video_driver.crash.connect(self.crash_driver)
-
-    def setup_ui(self):
         self.setWindowFlags(Qt.WindowTransparentForInput)
-        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setMouseTracking(True)
 
+        self.setup_ui()
+
+        self.video_driver = VideoDriverVLCSW(
+            image_dest=self._videoitem, process_manager=process_manager, parent=self
+        )
+        qt_connect(
+            (self.video_driver.time_changed, self.time_change_emit),
+            (self.video_driver.load_finished, self.load_video_finish),
+            (self.video_driver.error, self.error_state),
+            (self.video_driver.crash, self.crash_driver),
+        )
+
+    def setup_ui(self):  # noqa: WPS213
         QStackedLayout(self)
         self.layout().setSpacing(0)
         self.layout().setContentsMargins(0, 0, 0, 0)
 
         # =========
 
-        self._scene = QtWidgets.QGraphicsScene(self)
+        self._scene = QGraphicsScene(self)
         self._videoitem = QGraphicsPixmapItem()
         self._videoitem.setTransformationMode(Qt.SmoothTransformation)
         self._videoitem.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
         self._scene.addItem(self._videoitem)
 
-        self._gv = QtWidgets.QGraphicsView(self._scene, self)
+        self._gv = QGraphicsView(self._scene, self)
         self._gv.setBackgroundBrush(QBrush(Qt.black))
         self._gv.setWindowFlags(Qt.WindowTransparentForInput)
-        self._gv.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self._gv.setAttribute(Qt.WA_TransparentForMouseEvents)
         self._gv.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._gv.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._gv.setFrameStyle(QFrame.NoFrame)
@@ -362,7 +373,8 @@ class VideoFrameVLCSW(QtWidgets.QWidget):
 
     def adjust_view(self):
         self._gv.fitInView(self._videoitem, self._aspect)
-        self._gv.scale(self._scale + 0.05, self._scale + 0.05)
+        black_border_cut = 0.05
+        self._gv.scale(self._scale + black_border_cut, self._scale + black_border_cut)
 
     def time_change_emit(self, new_time):
         self.time_changed.emit(new_time)
