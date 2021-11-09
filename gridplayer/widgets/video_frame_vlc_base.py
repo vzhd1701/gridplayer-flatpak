@@ -353,6 +353,31 @@ class VLCVideoDriverThreaded(CommandLoopThreaded, QObject):
 
 
 class InstanceProcessVLC(InstanceProcess):
+    def __init__(self, vlc_log_level, **kwargs):
+        super().__init__(**kwargs)
+
+        self._vlc = InstanceVLC(vlc_log_level)
+
+    @property
+    def vlc_instance(self):
+        return self._vlc.vlc_instance
+
+    def init_instance(self):
+        self._vlc.init_instance()
+
+    def cleanup_instance(self):
+        self._vlc.cleanup_instance()
+
+    # outside
+    def request_set_log_level_vlc(self, log_level):
+        self.cmd_send_self("set_log_level_vlc", log_level)
+
+    # process
+    def set_log_level_vlc(self, log_level):
+        self._vlc.set_log_level_vlc(log_level)
+
+
+class InstanceVLC(object):
     log_level_map = {
         vlc.LogLevel.DEBUG: logging.DEBUG,
         vlc.LogLevel.ERROR: logging.ERROR,
@@ -363,7 +388,8 @@ class InstanceProcessVLC(InstanceProcess):
     def __init__(self, vlc_log_level, **kwargs):
         super().__init__(**kwargs)
 
-        self._vlc_instance = None
+        self.vlc_instance = None
+
         self._vlc_options = []
         self._vlc_log_level = vlc_log_level
 
@@ -389,16 +415,16 @@ class InstanceProcessVLC(InstanceProcess):
         if params_env.IS_APPIMAGE:
             options.append("--aout=pulse")
 
-        self._vlc_instance = vlc.Instance(options)
+        self.vlc_instance = vlc.Instance(options)
 
-        if self._vlc_instance is None:
+        if self.vlc_instance is None:
             raise RuntimeError("VLC failed to initialize")
 
         self.init_logger()
 
     # process
     def cleanup_instance(self):
-        self._vlc_instance.release()
+        self.vlc_instance.release()
 
     # process
     def init_logger(self):
@@ -406,7 +432,7 @@ class InstanceProcessVLC(InstanceProcess):
         self._logger_cb = self.libvlc_log_callback()
         self._logger_buf = ctypes.create_string_buffer(self._logger_buf_len)
 
-        self._vlc_instance.log_set(self._logger_cb, None)
+        self.vlc_instance.log_set(self._logger_cb, None)
 
     # process
     def libvlc_log_callback(self):
@@ -425,10 +451,6 @@ class InstanceProcessVLC(InstanceProcess):
             self._logger.log(log_level, log_msg)
 
         return _cb
-
-    # outside
-    def request_set_log_level_vlc(self, log_level):
-        self.cmd_send_self("set_log_level_vlc", log_level)
 
     # process
     def set_log_level_vlc(self, log_level):

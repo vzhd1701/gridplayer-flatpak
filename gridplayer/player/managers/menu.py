@@ -56,8 +56,22 @@ SECTIONS = MappingProxyType(
                 "-1%",
                 "-5%",
                 "-10%",
+                "---",
+                "+5s",
+                "+15s",
+                "+30s",
+                "-5s",
+                "-15s",
+                "-30s",
             ),
-            ("Grid", "Rows First", "Columns First"),
+            (
+                "Grid",
+                "Rows First",
+                "Columns First",
+                "---",
+                "Fit Cells",
+                "Size: %v",
+            ),
         ],
         "player": ["Fullscreen", "Minimize"],
         "program": [
@@ -169,5 +183,7 @@ class MenuManager(ManagerBase):
             action.setChecked(action.is_checked_test())
         if action.is_switchable:
             action.setEnabled(action.is_enabled_test())
+        if action.is_dynamic:
+            action.setText(action.value_template.replace("%v", action.value_getter()))
 
         menu.addAction(action)

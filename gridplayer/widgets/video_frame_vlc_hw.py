@@ -2,15 +2,10 @@ import platform
 from multiprocessing import Semaphore
 
 from PyQt5.QtCore import QMargins, Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QStackedLayout, QWidget
 
-from gridplayer.utils.misc import qt_connect
-
-if platform.system() == "Darwin":
-    from PyQt5.QtWidgets import QMacCocoaViewContainer  # noqa: WPS433
-
 from gridplayer.params_static import VideoAspect
+from gridplayer.utils.misc import qt_connect
 from gridplayer.widgets.video_frame_vlc_base import (
     InstanceProcessVLC,
     VlcPlayerThreaded,
@@ -31,7 +26,7 @@ class InstanceProcessVLCHW(InstanceProcessVLC):
             player_id=player_id,
             release_callback=self.release_player,
             init_data=init_data,
-            vlc_instance=self._vlc_instance,
+            vlc_instance=self.vlc_instance,
             crash_func=self.crash,
             pipe=pipe,
         )
@@ -179,15 +174,14 @@ class VideoFrameVLCHW(QWidget):
         self.layout().setContentsMargins(0, 0, 0, 0)
 
     def ui_video_widget(self):
-        if platform.system() == "Darwin":  # for MacOS
-            self.video_surface = QMacCocoaViewContainer(0, self)
-            self.palette = self.video_surface.palette()
-            self.palette.setColor(QPalette.Window, QColor(0, 0, 0))
-            self.video_surface.setPalette(self.palette)
-            self.video_surface.setAutoFillBackground(True)
+        if platform.system() == "Darwin":
+            # Drawing using window id from another process is not possible on MacOS
+            # https://stackoverflow.com/questions/583202/mac-os-x-can-one-process-render-to-another-processs-window
+            raise NotImplementedError()
         else:
             self.video_surface = QWidget(self)
 
+        self.video_surface.setMouseTracking(True)
         self.video_surface.setWindowFlags(Qt.WindowTransparentForInput)
         self.video_surface.setAttribute(Qt.WA_TransparentForMouseEvents)
 

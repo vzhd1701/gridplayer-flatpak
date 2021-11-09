@@ -59,6 +59,18 @@ COMMANDS = MappingProxyType(
             "func": ("set_grid_mode", GridMode.AUTO_COLS),
             "check": ("is_grid_mode_set_to", GridMode.AUTO_COLS),
         },
+        "Fit Cells": {
+            "key": "Alt+F",
+            "icon": "grid-fit",
+            "func": "switch_is_grid_fit",
+            "check": "is_grid_fit",
+        },
+        "Size: %v": {
+            "key": "Alt+N",
+            "icon": "grid-size",
+            "func": "ask_grid_size",
+            "value": "get_grid_size",
+        },
         "Zoom In": {
             "key": "+",
             "icon": "zoom-in",
@@ -169,7 +181,7 @@ COMMANDS = MappingProxyType(
             "func": ("seek_shift_all", 5),
         },
         "+10%": {
-            "key": Qt.CTRL + Qt.Key_Right,
+            "key": Qt.ALT + Qt.Key_Right,
             "icon": "seek-plus-10",
             "func": ("seek_shift_all", 10),
         },
@@ -184,9 +196,39 @@ COMMANDS = MappingProxyType(
             "func": ("seek_shift_all", -5),
         },
         "-10%": {
-            "key": Qt.CTRL + Qt.Key_Left,
+            "key": Qt.ALT + Qt.Key_Left,
             "icon": "seek-minus-10",
             "func": ("seek_shift_all", -10),
+        },
+        "+5s": {
+            "key": Qt.CTRL + Qt.Key_Right,
+            "icon": "seek-plus-1",
+            "func": ("seek_shift_ms_all", 5000),
+        },
+        "+15s": {
+            "key": Qt.CTRL + Qt.SHIFT + Qt.Key_Right,
+            "icon": "seek-plus-5",
+            "func": ("seek_shift_ms_all", 15000),
+        },
+        "+30s": {
+            "key": Qt.CTRL + Qt.ALT + Qt.Key_Right,
+            "icon": "seek-plus-10",
+            "func": ("seek_shift_ms_all", 30000),
+        },
+        "-5s": {
+            "key": Qt.CTRL + Qt.Key_Left,
+            "icon": "seek-minus-1",
+            "func": ("seek_shift_ms_all", -5000),
+        },
+        "-15s": {
+            "key": Qt.CTRL + Qt.SHIFT + Qt.Key_Left,
+            "icon": "seek-minus-5",
+            "func": ("seek_shift_ms_all", -15000),
+        },
+        "-30s": {
+            "key": Qt.CTRL + Qt.ALT + Qt.Key_Left,
+            "icon": "seek-minus-10",
+            "func": ("seek_shift_ms_all", -30000),
         },
         "Settings": {
             "key": "F5",
@@ -244,5 +286,11 @@ class ActionsManager(ManagerBase):
         action.is_switchable = is_enabled_test is not None
         if is_enabled_test is not None:
             action.is_enabled_test = self._ctx.commands.resolve(is_enabled_test)
+
+        value_getter = cmd.get("value")
+        action.is_dynamic = value_getter is not None
+        if value_getter is not None:
+            action.value_template = cmd_name
+            action.value_getter = self._ctx.commands.resolve(value_getter)
 
         return action

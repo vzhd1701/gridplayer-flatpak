@@ -79,7 +79,7 @@ class ImageDecoder(object):
 
                 # Callback is firing while on pause,
                 # so check if the frame content actually changed
-                if self.is_paused and self._is_frame_changed():
+                if self.is_paused and not self._is_frame_changed():
                     return
 
                 self._frame_ready_cb()
@@ -155,7 +155,7 @@ class InstanceProcessVLCSW(InstanceProcessVLC):
             player_id=player_id,
             release_callback=self.release_player,
             init_data=init_data,
-            vlc_instance=self._vlc_instance,
+            vlc_instance=self.vlc_instance,
             crash_func=self.crash,
             pipe=pipe,
         )

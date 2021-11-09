@@ -1,3 +1,4 @@
+import platform
 from enum import Enum, auto
 from typing import NamedTuple
 
@@ -5,7 +6,11 @@ PLAYER_ID_LENGTH = 8
 
 PLAYER_INITIAL_SIZE = (640, 360)
 PLAYER_MIN_VIDEO_SIZE = (100, 90)
-PLAYER_INFO_TEXT_SIZE = 16
+
+if platform.system() == "Darwin":
+    PLAYER_INFO_TEXT_SIZE = 24
+else:
+    PLAYER_INFO_TEXT_SIZE = 16
 
 
 class AutoName(Enum):
@@ -27,6 +32,7 @@ class VideoAspect(AutoName):
 class VideoDriver(AutoName):
     VLC_SW = auto()
     VLC_HW = auto()
+    VLC_HW_SP = auto()
     DUMMY = auto()
 
 
