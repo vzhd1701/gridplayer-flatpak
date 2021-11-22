@@ -98,6 +98,7 @@ class Player(QWidget, ManagersManager):
                 ("playlist_loaded", "window_state.activate_window"),
                 ("window_state_loaded", "window_state.restore_window_state"),
                 ("grid_state_loaded", "grid.set_grid_state"),
+                ("is_seek_synced_loaded", "video_blocks.set_seek_synced"),
                 ("videos_loaded", "video_blocks.add_videos"),
                 ("alert", "window_state.activate_window"),
                 ("error", "dialogs.error"),
@@ -120,9 +121,10 @@ class Player(QWidget, ManagersManager):
                 ("files_opened", "playlist.process_arguments")
             ]
 
+        self.global_event_filters.append("mouse_hide")
+
         self.event_filters = [
             "window_state",
-            "mouse_hide",
             "drag_n_drop",
             "active_block",
             "single_mode",
