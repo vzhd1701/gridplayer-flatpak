@@ -1,9 +1,14 @@
+import logging
+import os
 import platform
 import sys
 
-from PyQt5.QtCore import QDir, QDirIterator, Qt
+from PyQt5.QtCore import QDir, QDirIterator, QLibraryInfo, QLocale, Qt, QTranslator
 from PyQt5.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon
 from PyQt5.QtWidgets import QApplication, QStyleFactory
+
+from gridplayer import params_env
+from gridplayer.settings import Settings
 
 if platform.system() == "Windows":
     from PyQt5.QtWinExtras import QtWin  # noqa: WPS433
@@ -55,6 +60,8 @@ def init_app():
     font_size = app.font().pointSize() if platform.system() == "Darwin" else 9
     app.setFont(QFont("Hack", font_size, QFont.Normal))
 
+    _init_translator(app)
+
     return app
 
 
@@ -85,3 +92,32 @@ def _init_resources():
     while fonts.hasNext():
         font = fonts.next()  # noqa: B305
         QFontDatabase.addApplicationFont(font)
+
+
+def _init_translator(app):
+    lang = Settings().get("player/language")
+    if lang == "en_US":
+        return
+
+    logger = logging.getLogger("INIT")
+    logger.debug(f"Loading translation for {lang}")
+
+    if params_env.IS_PYINSTALLER and platform.system() == "Windows":
+        qt_translations_path = os.path.join(
+            sys._MEIPASS, "PyQt5", "Qt5", "translations"
+        )
+    else:
+        qt_translations_path = QLibraryInfo.location(QLibraryInfo.TranslationsPath)
+    logger.debug(f"QT translations path: {qt_translations_path}")
+
+    translator_qt = QTranslator(app)
+    if translator_qt.load(QLocale(lang), "qtbase_", "", qt_translations_path):
+        app.installTranslator(translator_qt)
+    else:
+        logger.warning(f"Failed to load QT translation for {lang}")
+
+    translator = QTranslator(app)
+    if translator.load(lang, ":/translations/"):
+        app.installTranslator(translator)
+    else:
+        logger.warning(f"Failed to load translation for {lang}")

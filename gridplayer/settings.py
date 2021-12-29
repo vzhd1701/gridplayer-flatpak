@@ -1,16 +1,29 @@
 import logging
-import os
 import platform
 from enum import Enum
 
 from pydantic import Field
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QLocale, QSettings
 
-from gridplayer.params_static import GridMode, VideoAspect, VideoDriver
+from gridplayer.params_static import (
+    SUPPORTED_LANGUAGES,
+    GridMode,
+    VideoAspect,
+    VideoDriver,
+    VideoRepeat,
+)
 from gridplayer.utils.app_dir import get_app_data_dir
 from gridplayer.utils.log_config import DISABLED
 
 SETTINGS = None
+
+
+def default_language():
+    lang = QLocale().system().name()
+    if lang in SUPPORTED_LANGUAGES:
+        return lang
+    return "en_US"
+
 
 _default_settings = {
     "player/video_driver": VideoDriver.VLC_HW,
@@ -19,6 +32,7 @@ _default_settings = {
     "player/pause_minimized": True,
     "player/inhibit_screensaver": True,
     "player/one_instance": True,
+    "player/language": default_language(),
     "playlist/grid_mode": GridMode.AUTO_ROWS,
     "playlist/grid_fit": True,
     "playlist/grid_size": 0,
@@ -27,9 +41,11 @@ _default_settings = {
     "playlist/save_window": False,
     "playlist/seek_synced": False,
     "video_defaults/aspect": VideoAspect.FIT,
+    "video_defaults/repeat": VideoRepeat.SINGLE_FILE,
     "video_defaults/random_loop": False,
     "video_defaults/muted": True,
     "video_defaults/paused": False,
+    "misc/overlay_hide": True,
     "misc/overlay_timeout": 1,
     "misc/mouse_hide": True,
     "misc/mouse_hide_timeout": 3,
@@ -44,9 +60,9 @@ if platform.system() == "Darwin":
 
 class _Settings(object):
     def __init__(self):
-        settings_path = os.path.join(get_app_data_dir(), "settings.ini")
+        settings_path = get_app_data_dir() / "settings.ini"
 
-        self.settings = QSettings(settings_path, QSettings.IniFormat)
+        self.settings = QSettings(str(settings_path), QSettings.IniFormat)
 
         logging.getLogger("Settings").debug(f"Settings path: {settings_path}")
 

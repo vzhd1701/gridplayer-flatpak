@@ -11,7 +11,7 @@
   <summary>Play videos side-by-side</summary>
   <description>
     <p>
-      Simple VLC-based media player that can play multiple videos at the same time.
+      Simple VLC-based video player that can play multiple videos at the same time.
       You can play as many videos as you like, the only limit is your hardware. It
       supports all video formats that VLC supports (which is all of them). You can
       save your playlist retaining information about the position, sound volume,
@@ -43,10 +43,14 @@
       <image>https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/screenshot-003.png</image>
       <caption>Settings window</caption>
     </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/screenshot-004.png</image>
+      <caption>Vertical videos</caption>
+    </screenshot>
   </screenshots>
   <url type="homepage">https://github.com/vzhd1701/gridplayer</url>
   <url type="bugtracker">https://github.com/vzhd1701/gridplayer/issues</url>
   <releases>
-    <release date="2021-12-01" version="0.1.6"/>
+    <release date="2021-12-29" version="0.2.0"/>
   </releases>
 </component>

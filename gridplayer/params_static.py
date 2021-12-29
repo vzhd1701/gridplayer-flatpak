@@ -29,6 +29,12 @@ class VideoAspect(AutoName):
     NONE = auto()
 
 
+class VideoRepeat(AutoName):
+    SINGLE_FILE = auto()
+    DIR = auto()
+    DIR_SHUFFLE = auto()
+
+
 class VideoDriver(AutoName):
     VLC_SW = auto()
     VLC_HW = auto()
@@ -40,6 +46,12 @@ class WindowState(NamedTuple):
     is_maximized: bool
     is_fullscreen: bool
     geometry: str
+
+
+SUPPORTED_LANGUAGES = (
+    "en_US",
+    "ru_RU",
+)
 
 
 SUPPORTED_VIDEO_EXT = frozenset(
