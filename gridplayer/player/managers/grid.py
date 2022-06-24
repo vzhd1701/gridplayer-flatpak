@@ -1,3 +1,4 @@
+import contextlib
 import math
 from typing import NamedTuple
 
@@ -6,8 +7,8 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout
 
 from gridplayer.dialogs.input_dialog import QCustomSpinboxInput
-from gridplayer.params import GridState
-from gridplayer.params_static import (
+from gridplayer.models.grid_state import GridState
+from gridplayer.params.static import (
     PLAYER_INFO_TEXT_SIZE,
     PLAYER_INITIAL_SIZE,
     PLAYER_MIN_VIDEO_SIZE,
@@ -15,7 +16,7 @@ from gridplayer.params_static import (
 )
 from gridplayer.player.managers.base import ManagerBase
 from gridplayer.settings import Settings
-from gridplayer.utils.misc import tr
+from gridplayer.utils.qt import translate
 
 
 class GridDimensions(NamedTuple):
@@ -59,9 +60,11 @@ class GridManager(ManagerBase):
         self._grid.setContentsMargins(0, 0, 0, 0)
 
         self._info_label = QLabel(
-            tr("Drag and drop video files here"), parent=self.parent()
+            translate("Main Window", "Drag and drop media files or URLs here"),
+            parent=self.parent(),
         )
         self._info_label.setAlignment(Qt.AlignCenter)
+        self._info_label.setWordWrap(True)
         font = QFont("Hack", PLAYER_INFO_TEXT_SIZE, QFont.Bold)
         self._info_label.setFont(font)
 
@@ -109,6 +112,12 @@ class GridManager(ManagerBase):
 
         return GridDimensions(cols, rows)
 
+    @contextlib.contextmanager
+    def slow_ui_operation(self):
+        self.parent().setUpdatesEnabled(False)
+        yield
+        self.parent().setUpdatesEnabled(True)
+
     def grid_state(self):
         return GridState(
             mode=self._grid_mode,
@@ -132,7 +141,12 @@ class GridManager(ManagerBase):
 
     def cmd_ask_grid_size(self):
         size = QCustomSpinboxInput.get_int(
-            self.parent(), tr("Set grid size"), tr("Auto"), self._grid_size, 0, 1000
+            self.parent(),
+            translate("Dialog - Set grid size", "Set grid size", "Header"),
+            translate("Grid Size", "Auto"),
+            self._grid_size,
+            0,
+            1000,
         )
 
         if self._grid_size == size:
@@ -143,7 +157,7 @@ class GridManager(ManagerBase):
 
     def cmd_get_grid_size(self):
         if self._grid_size == 0:
-            return tr("Auto")
+            return translate("Grid Size", "Auto")
 
         return str(self._grid_size)
 
@@ -158,19 +172,21 @@ class GridManager(ManagerBase):
             self._adjust_grid_stretch()
 
     def reload_video_grid(self):
-        self._reset_video_grid()
+        with self.slow_ui_operation():
+            self._reset_video_grid()
 
-        if not self._ctx.video_blocks:
-            return
+            if not self._ctx.video_blocks:
+                self._grid.activate()
+                return
 
-        self._adjust_window()
-        self._adjust_cells()
+            self._adjust_window()
+            self._adjust_cells()
 
-        self._populate_grid()
+            self._populate_grid()
 
-        self.adapt_grid()
+            self.adapt_grid()
 
-        self.parent().layout().activate()
+            self._grid.activate()
 
     def _reset_grid_stretch(self):
         for c in range(self._grid.columnCount()):

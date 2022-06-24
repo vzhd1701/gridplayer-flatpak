@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: gridplayer
-Version: 0.2.2
+Version: 0.3.0
 Summary: Play videos side-by-side
 Home-page: https://github.com/vzhd1701/gridplayer
 License: GPL-3.0-or-later
@@ -26,6 +26,8 @@ Requires-Dist: pydantic (>=1.8.2,<2.0.0)
 Requires-Dist: pyobjc-core; sys_platform == "darwin"
 Requires-Dist: pyobjc-framework-Cocoa; sys_platform == "darwin"
 Requires-Dist: python-vlc (==3.0.11115)
+Requires-Dist: streamlink (==4.1.0)
+Requires-Dist: yt-dlp (==2022.6.22.1)
 Project-URL: Changelog, https://github.com/vzhd1701/gridplayer/blob/master/CHANGELOG.md
 Project-URL: Repository, https://github.com/vzhd1701/gridplayer
 Description-Content-Type: text/markdown
@@ -48,12 +50,13 @@ Description-Content-Type: text/markdown
 Simple VLC-based media player that can play multiple videos at the same time. You can
 play as many videos as you like, the only limit is your hardware. It supports all video
 formats that VLC supports (which is all of them). You can save your playlist retaining
-information about the position, sound volume,  loops, aspect ratio, etc.
+information about the position, sound volume, loops, aspect ratio, etc.
 
 ## Features
 
 - Cross-platform (Linux, Mac, and Windows)
-- Support for any video format (VLC)
+- Support for any video and audio format (VLC)
+- Support for (almost) any streaming URLs ([streamlink](https://github.com/streamlink/streamlink) + [yt-dlp](https://github.com/yt-dlp/yt-dlp))
 - Hardware & software video decoding
 - Control video aspect, playback speed, zoom
 - Set loop fragments with frame percision
@@ -72,33 +75,43 @@ there are not many strings to translate. Every contributor will be given proper 
 
 ### Windows
 
-[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.2.2/GridPlayer-0.2.2-win64-install.exe)
-[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.2.2/GridPlayer-0.2.2-win64-portable.zip)
+[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.3.0/GridPlayer-0.3.0-win64-install.exe)
+[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.3.0/GridPlayer-0.3.0-win64-portable.zip)
+
+**Compatible with Windows 7, 8, 10, 11.**
 
 ### Linux
 
 [![Get it from the Flathub](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_flathub.png)](https://flathub.org/apps/details/com.vzhd1701.gridplayer)
 [![Get it from the Snap Store](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_snap.png)](https://snapcraft.io/gridplayer)
-[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.2.2/GridPlayer-0.2.2-x86_64.AppImage)
+[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.3.0/GridPlayer-0.3.0-x86_64.AppImage)
 
 **For better system integration install via Flathub.**
 
 #### Note on AppImage
 
+The AppImage was built using Ubuntu Focal Fossa libraries, so compatibility is Ubuntu 20+.
+
 You may need to set execute permissions on AppImage file in order to run it:
 
 ```shell
-$ chmod +x GridPlayer-0.2.2-x86_64.AppImage
+$ chmod +x GridPlayer-0.3.0-x86_64.AppImage
 ```
 
 ### MacOS
 
-[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.2.2/GridPlayer.0.2.2.dmg)
+[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.3.0/GridPlayer.0.3.0.dmg)
 
 **DMG image is not signed.** You will have to add an exception to run this app.
 
 - [How to open an app that hasn’t been notarized or is from an unidentified developer](https://support.apple.com/en-euro/HT202491)
 - [Open a Mac app from an unidentified developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unidentified-developer-mh40616/mac)
+
+If you get "GridPlayer is damaged and can't be opened" error, run this command in the Terminal app:
+
+```shell
+$ sudo xattr -rd com.apple.quarantine /Applications/GridPlayer.app
+```
 
 ### PIP
 
@@ -126,9 +139,22 @@ $ poetry run gridplayer
 
 The same notes about the Python version and external packages from **PIP** installation apply here.
 
+## Video Decoder settings
+
+GridPlayer supports two video output modes:
+
+- Hardware (default) mode uses available GPU to render video. This mode offers high performance and is a recommended mode.
+- Software mode is entirely independent of GPU and only uses the CPU to render video. This mode may cause a high CPU load with high-resolution videos.
+
+Due to libvlc software library limitations, video decoding is split into parallel processes. You can control how many videos are handled by a single decoder process using the "Videos per process" setting. Setting this option too high may cause a high CPU load and application freeze. The optimal value is 4 videos per process.
+
+There is also "Hardware SP" mode. It handles video decoding within the same process in which GridPlayer runs. It is not recommended to use with many videos (>4-6) because it may cause high CPU load and application freeze.
+
+Due to OS inter-process restrictions, "Hardware SP" is the only available hardware mode in macOS.
+
 ## Known issues
 
-#### Linux (Snap): [X screen](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/screenshot-x.png) when opening a file from the mounted disk
+#### Linux (Snap): Error when opening a file from the mounted disk
 
 You need to allow GridPlayer snap to access removable storage devices via Snap Store or by running:
 
@@ -156,14 +182,6 @@ Switch on "Opaque overlay (fix black screen)" checkbox in settings.
 
 Overlay might be a bit glitchy in KDE with hardware decoder.
 
-#### MacOS: "GridPlayer" is damaged and can't be opened
-
-To fix this, you need to execute the following command using terminal:
-
-```shell
-$ sudo xattr -rd com.apple.quarantine /Applications/GridPlayer.app
-```
-
 ## Geting help
 
 If you found a bug or have a feature request, please [open a new issue](https://github.com/vzhd1701/gridplayer/issues/new/choose).
@@ -189,6 +207,10 @@ This software was build using
   - Licensed under *GPL 2.0 and LGPL 2.1*
 - **pydantic** by [Samuel Colvin](https://github.com/samuelcolvin/pydantic)
   - Licensed under *MIT License*
+- **streamlink** by [Christopher Rosell, Streamlink Team](https://github.com/streamlink/streamlink)
+  - Licensed under *BSD-2-Clause License*
+- **yt-dlp** by [Contributors](https://github.com/yt-dlp/yt-dlp)
+  - Licensed under *Unlicense License*
 
 ### Graphics
 
@@ -200,6 +222,10 @@ This software was build using
   - Licensed under *Creative Commons Attribution-Share Alike 4.0*
 - **Clean App Download Buttons** by [Tony Thomas](https://medialoot.com/item/clean-app-download-buttons/)
   - Licensed under *MediaLoot License*
+
+### Translations
+
+- **Hungarian** by [samu112](https://crowdin.com/profile/samu112)
 
 ## License
 

@@ -1,16 +1,21 @@
+import os
+import re
+import signal
 from multiprocessing.process import active_children
 
-from PyQt5.QtCore import QCoreApplication
-from PyQt5.QtWidgets import QApplication
+from gridplayer.params import env
 
 
-def is_modal_open():
-    return bool(QApplication.activeModalWidget() or QApplication.activePopupWidget())
+def force_terminate_resource_tracker():
+    # windows doesn't have resource tracker
+    if env.IS_WINDOWS:
+        return
 
+    # kill resource_tracker first so it won't complain about leaked resources
+    from multiprocessing.resource_tracker import _resource_tracker  # noqa: WPS450
 
-def qt_connect(*connections):
-    for c_sig, c_slot in connections:
-        c_sig.connect(c_slot)
+    if _resource_tracker._pid is not None:  # noqa: WPS437
+        os.kill(_resource_tracker._pid, signal.SIGKILL)  # noqa: WPS437
 
 
 def force_terminate_children():
@@ -18,9 +23,17 @@ def force_terminate_children():
         p.terminate()
 
 
-def tr(text):
-    return QCoreApplication.translate("@default", text)
+def force_terminate_children_all():
+    force_terminate_resource_tracker()
+    force_terminate_children()
 
 
-def translate(context, text):
-    return QCoreApplication.translate(context, text)
+def force_terminate(exit_code: int = 0):
+    if not env.IS_WINDOWS:
+        force_terminate_children_all()
+
+    os._exit(exit_code)  # noqa: WPS437
+
+
+def is_url(s) -> bool:
+    return bool(re.match("^[a-z]+://", s))

@@ -1,9 +1,7 @@
-import logging
-import platform
-
-from PyQt5.QtCore import QEvent, pyqtSignal
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget
 
+from gridplayer.params import env
 from gridplayer.player.manager import ManagersManager
 from gridplayer.player.managers.actions import ActionsManager
 from gridplayer.player.managers.active_block import ActiveBlockManager
@@ -20,11 +18,10 @@ from gridplayer.player.managers.playlist import PlaylistManager
 from gridplayer.player.managers.screensaver import ScreensaverManager
 from gridplayer.player.managers.settings import SettingsManager
 from gridplayer.player.managers.single_mode import SingleModeManager
+from gridplayer.player.managers.snapshots import SnapshotsManager
 from gridplayer.player.managers.video_blocks import VideoBlocksManager
 from gridplayer.player.managers.video_driver import VideoDriverManager
 from gridplayer.player.managers.window_state import WindowStateManager
-
-logger = logging.getLogger(__name__)
 
 
 class Player(QWidget, ManagersManager):
@@ -42,6 +39,7 @@ class Player(QWidget, ManagersManager):
             "video_blocks": VideoBlocksManager,
             "grid": GridManager,
             "playlist": PlaylistManager,
+            "snapshots": SnapshotsManager,
             "screensaver": ScreensaverManager,
             "active_block": ActiveBlockManager,
             "mouse_hide": MouseHideManager,
@@ -56,11 +54,13 @@ class Player(QWidget, ManagersManager):
         }
 
         self.connections = {
-            "video_driver": [("video_blocks.video_count_changed", "set_video_count")],
-            "window_state": [("pause_on_minimize", "video_blocks.pause_all")],
+            "window_state": [
+                ("pause_on_minimize", "video_blocks.pause_all"),
+            ],
             "grid": [
                 ("minimum_size_changed", "window_state.set_minimum_size"),
                 ("video_blocks.video_count_changed", "reload_video_grid"),
+                ("video_blocks.video_order_changed", "reload_video_grid"),
             ],
             "screensaver": [
                 ("video_blocks.playings_videos_count_changed", "screensaver_check")
@@ -81,6 +81,9 @@ class Player(QWidget, ManagersManager):
                 ("mode_changed", "grid.adapt_grid"),
                 ("video_blocks.video_count_changed", "set_video_count"),
             ],
+            "video_blocks": [
+                ("reload_all_closed", "video_driver.cleanup"),
+            ],
             "settings": [
                 ("reload", "video_blocks.reload_videos"),
                 ("set_screensaver", "screensaver.screensaver_check"),
@@ -92,21 +95,30 @@ class Player(QWidget, ManagersManager):
                 ("s.arguments_received", "process_arguments"),
                 ("playlist_closed", "video_blocks.close_all"),
                 ("playlist_closed", "window_state.restore_to_minimum"),
-                ("playlist_loaded", "window_state.activate_window"),
                 ("window_state_loaded", "window_state.restore_window_state"),
                 ("grid_state_loaded", "grid.set_grid_state"),
-                ("is_seek_synced_loaded", "video_blocks.set_seek_synced"),
+                ("snapshots_loaded", "snapshots.set_snapshots"),
+                ("seek_sync_mode_loaded", "video_blocks.set_seek_sync_mode"),
+                ("shuffle_on_load_loaded", "video_blocks.set_shuffle_on_load"),
+                ("disable_click_pause_loaded", "video_blocks.set_disable_click_pause"),
+                ("disable_wheel_seek_loaded", "video_blocks.set_disable_wheel_seek"),
                 ("videos_loaded", "video_blocks.add_videos"),
                 ("alert", "window_state.activate_window"),
                 ("error", "dialogs.error"),
             ],
+            "snapshots": [
+                ("grid_state_loaded", "grid.set_grid_state"),
+                ("video_blocks.video_count_changed", "clear_snapshots"),
+                ("warning", "dialogs.warning"),
+            ],
             "add_videos": [
                 ("videos_added", "video_blocks.add_videos"),
                 ("videos_added", "window_state.activate_window"),
+                ("error", "dialogs.error"),
             ],
         }
 
-        if platform.system() == "Darwin":
+        if env.IS_MACOS:
             self.managers["macos_fileopen"] = MacOSFileOpenManager
             self.connections["macos_fileopen"] = [
                 ("file_opened", "playlist.process_arguments")
@@ -115,7 +127,8 @@ class Player(QWidget, ManagersManager):
         else:
             self.managers["instance_listener"] = InstanceListenerManager
             self.connections["instance_listener"] = [
-                ("files_opened", "playlist.process_arguments")
+                ("files_opened", "playlist.process_arguments"),
+                ("window_state.closing", "cleanup"),
             ]
 
         self.global_event_filters.append("mouse_hide")
@@ -125,7 +138,6 @@ class Player(QWidget, ManagersManager):
             "drag_n_drop",
             "active_block",
             "single_mode",
-            "playlist",
             "menu",
         ]
 

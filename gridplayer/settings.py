@@ -1,13 +1,14 @@
 import logging
-import platform
 from enum import Enum
 
 from pydantic import Field
 from PyQt5.QtCore import QLocale, QSettings
 
-from gridplayer.params_static import (
+from gridplayer.params import env
+from gridplayer.params.static import (
     SUPPORTED_LANGUAGES,
     GridMode,
+    SeekSyncMode,
     VideoAspect,
     VideoDriver,
     VideoRepeat,
@@ -39,23 +40,27 @@ _default_settings = {
     "playlist/save_position": False,
     "playlist/save_state": False,
     "playlist/save_window": False,
-    "playlist/seek_synced": False,
+    "playlist/seek_sync_mode": SeekSyncMode.DISABLED,
     "playlist/track_changes": True,
+    "playlist/shuffle_on_load": False,
+    "playlist/disable_click_pause": False,
+    "playlist/disable_wheel_seek": False,
     "video_defaults/aspect": VideoAspect.FIT,
     "video_defaults/repeat": VideoRepeat.SINGLE_FILE,
     "video_defaults/random_loop": False,
     "video_defaults/muted": True,
     "video_defaults/paused": False,
+    "video_defaults/stream_quality": "best",
     "misc/overlay_hide": True,
-    "misc/overlay_timeout": 1,
+    "misc/overlay_timeout": 3,
     "misc/mouse_hide": True,
-    "misc/mouse_hide_timeout": 3,
+    "misc/mouse_hide_timeout": 5,
     "logging/log_level": logging.WARNING,
     "logging/log_level_vlc": DISABLED,
     "internal/opaque_hw_overlay": False,
 }
 
-if platform.system() == "Darwin":
+if env.IS_MACOS:
     _default_settings["player/video_driver"] = VideoDriver.VLC_HW_SP
 
 
@@ -73,7 +78,10 @@ class _Settings(object):
         if issubclass(setting_type, Enum):
             setting_value = self.settings.value(setting, _default_settings[setting])
             if isinstance(setting_value, str):
-                return setting_type(setting_value)
+                try:
+                    return setting_type(setting_value)
+                except ValueError:
+                    return _default_settings[setting]
 
         return self.settings.value(
             setting, _default_settings[setting], type=setting_type

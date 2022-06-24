@@ -37,6 +37,9 @@ class StreamToLogger(object):
     def flush(self):
         """Not used"""
 
+    def isatty(self):
+        return False
+
 
 class QtLogHandler(object):
     log_level_map = {
@@ -48,7 +51,7 @@ class QtLogHandler(object):
     }
 
     def __init__(self):
-        self._logger = logging.getLogger("QT")
+        self._log = logging.getLogger("QT")
 
     def handle(self, mode, context, message):
         log_level = self.log_level_map[mode]
@@ -60,9 +63,9 @@ class QtLogHandler(object):
                 f" file: {context.file}"
             )
 
-            self._logger.log(log_level, log_msg_head)
+            self._log.log(log_level, log_msg_head)
 
-        self._logger.log(log_level, message.strip())
+        self._log.log(log_level, message.strip())
 
 
 def config_log(log_path: Path, log_level: int):
@@ -107,19 +110,9 @@ def set_root_level(log_level):
     logging.root.setLevel(log_level)
 
 
-def override_stdout():
-    stdout_logger = logging.getLogger("STDOUT")
-    sys.stdout = StreamToLogger(stdout_logger, logging.INFO)
-
-    stderr_logger = logging.getLogger("STDERR")
-    sys.stderr = StreamToLogger(stderr_logger, logging.ERROR)
-
-
 def child_process_config(queue, log_level):
     h = QueueHandler(queue)
 
     root = logging.getLogger()
     root.addHandler(h)
     root.setLevel(log_level)
-
-    override_stdout()

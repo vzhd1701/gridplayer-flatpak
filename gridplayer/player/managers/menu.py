@@ -2,30 +2,38 @@ from types import MappingProxyType
 
 from PyQt5.QtCore import QEvent
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QMenu, QProxyStyle, QStyle
+from PyQt5.QtWidgets import QMenu
 
+from gridplayer.player.managers.actions import QDynamicAction
 from gridplayer.player.managers.base import ManagerBase
-from gridplayer.utils.misc import translate
-
-MENU_STYLE = """
-QMenu::item { height:24px; padding: 2px; margin: 0 5px;}
-QMenu::item:selected { background-color: #53aedf; }
-QMenu::item:checked { background-color: #7b888f; }
-QMenu::separator { height: 2px; margin: 0; }
-"""
+from gridplayer.utils.qt import translate
+from gridplayer.widgets.custom_menu import BigMenuIcons, CustomMenu
 
 SUBMENUS = MappingProxyType(
     {
-        "Step": {"title": translate("Actions", "Step"), "icon": "next-frame"},
+        "Jump (to)": {"title": translate("Actions", "Jump (to)"), "icon": "jump-to"},
         "Loop": {"title": translate("Actions", "Loop"), "icon": "loop"},
         "Speed": {"title": translate("Actions", "Speed"), "icon": "speed"},
         "Zoom": {"title": translate("Actions", "Zoom"), "icon": "zoom"},
         "Aspect": {"title": translate("Actions", "Aspect"), "icon": "aspect"},
-        "Jump (to) [ALL]": {
-            "title": translate("Actions", "Jump (to) [ALL]"),
-            "icon": "jump-to",
-        },
+        "[ALL]": {"title": translate("Actions", "[ALL]"), "icon": "play-all"},
         "Grid": {"title": translate("Actions", "Grid"), "icon": "grid"},
+        "Seek Sync": {"title": translate("Actions", "Seek Sync"), "icon": "seek-sync"},
+        "Seek Others": {
+            "title": translate("Actions", "Sync Others"),
+            "icon": "seek-sync",
+        },
+        "Percent": {
+            "title": translate("Actions", "Percent"),
+            "icon": "seek-sync-percent",
+        },
+        "Playlist Settings": {
+            "title": translate("Actions", "Playlist Settings"),
+            "icon": "playlist-settings",
+        },
+        "Snapshots": {"title": translate("Actions", "Snapshots"), "icon": "snapshots"},
+        "Save Snapshot": {"title": translate("Actions", "Save Snapshot")},
+        "Delete Snapshot": {"title": translate("Actions", "Delete Snapshot")},
     }
 )
 
@@ -34,13 +42,46 @@ SECTIONS = MappingProxyType(
         "video_active": [
             "Play / Pause",
             "---",
+            "Previous Video",
+            "Next Video",
+            "---",
             "Play Previous File",
             "Play Next File",
             "---",
             (
-                "Step",
+                "Jump (to)",
+                (
+                    "Percent",
+                    "0%",
+                    "10%",
+                    "20%",
+                    "30%",
+                    "40%",
+                    "50%",
+                    "60%",
+                    "70%",
+                    "80%",
+                    "90%",
+                ),
+                "Timecode",
+                "Random",
+                "---",
                 "Next frame",
                 "Previous frame",
+                "---",
+                "+1%",
+                "+5%",
+                "+10%",
+                "-1%",
+                "-5%",
+                "-10%",
+                "---",
+                "+5s",
+                "+15s",
+                "+30s",
+                "-5s",
+                "-15s",
+                "-30s",
             ),
             (
                 "Loop",
@@ -72,44 +113,160 @@ SECTIONS = MappingProxyType(
                 "Aspect Stretch",
                 "Aspect None",
             ),
-            "Rename",
-        ],
-        "video_block": ["Close"],
-        "video_single": ["Next Video"],
-        "video_all": [
-            "Play / Pause [ALL]",
             (
-                "Jump (to) [ALL]",
+                "Seek Others",
+                "Seek Others (Percent)",
+                "Seek Others (Timecode)",
+            ),
+            "Stream Quality",
+            "Rename",
+            "Reload",
+            "Close",
+        ],
+        "video_all": [
+            (
+                "[ALL]",
+                "Play / Pause [ALL]",
+                "---",
+                "Play Previous File [ALL]",
+                "Play Next File [ALL]",
+                "---",
+                (
+                    "Jump (to)",
+                    (
+                        "Percent",
+                        "0% [ALL]",
+                        "10% [ALL]",
+                        "20% [ALL]",
+                        "30% [ALL]",
+                        "40% [ALL]",
+                        "50% [ALL]",
+                        "60% [ALL]",
+                        "70% [ALL]",
+                        "80% [ALL]",
+                        "90% [ALL]",
+                    ),
+                    "Timecode [ALL]",
+                    "Random [ALL]",
+                    "---",
+                    "Next frame [ALL]",
+                    "Previous frame [ALL]",
+                    "---",
+                    "+1% [ALL]",
+                    "+5% [ALL]",
+                    "+10% [ALL]",
+                    "-1% [ALL]",
+                    "-5% [ALL]",
+                    "-10% [ALL]",
+                    "---",
+                    "+5s [ALL]",
+                    "+15s [ALL]",
+                    "+30s [ALL]",
+                    "-5s [ALL]",
+                    "-15s [ALL]",
+                    "-30s [ALL]",
+                ),
+                (
+                    "Loop",
+                    "Random Loop [ALL]",
+                    "---",
+                    "Set Loop Start [ALL]",
+                    "Set Loop End [ALL]",
+                    "Loop Reset [ALL]",
+                    "---",
+                    "Repeat Single File [ALL]",
+                    "Repeat Directory [ALL]",
+                    "Repeat Directory (Shuffle) [ALL]",
+                ),
+                (
+                    "Speed",
+                    "Faster [ALL]",
+                    "Slower [ALL]",
+                    "Normal [ALL]",
+                ),
+                (
+                    "Zoom",
+                    "Zoom In [ALL]",
+                    "Zoom Out [ALL]",
+                    "Zoom Reset [ALL]",
+                ),
+                (
+                    "Aspect",
+                    "Aspect Fit [ALL]",
+                    "Aspect Stretch [ALL]",
+                    "Aspect None [ALL]",
+                ),
+                "---",
+                "Reload [ALL]",
+            ),
+            (
                 "Seek Sync",
-                "---",
-                "Random",
-                "---",
-                "+1%",
-                "+5%",
-                "+10%",
-                "-1%",
-                "-5%",
-                "-10%",
-                "---",
-                "+5s",
-                "+15s",
-                "+30s",
-                "-5s",
-                "-15s",
-                "-30s",
+                "Seek Sync (Disabled)",
+                "Seek Sync (Percent)",
+                "Seek Sync (Timecode)",
             ),
             (
                 "Grid",
+                "Shuffle Grid",
+                "Shuffle Grid On Load",
+                "---",
                 "Rows First",
                 "Columns First",
                 "---",
                 "Fit Cells",
                 "Size: %v",
             ),
+            (
+                "Snapshots",
+                (
+                    "Save Snapshot",
+                    "Save Snapshot (1)",
+                    "Save Snapshot (2)",
+                    "Save Snapshot (3)",
+                    "Save Snapshot (4)",
+                    "Save Snapshot (5)",
+                    "Save Snapshot (6)",
+                    "Save Snapshot (7)",
+                    "Save Snapshot (8)",
+                    "Save Snapshot (9)",
+                    "Save Snapshot (0)",
+                ),
+                (
+                    "Delete Snapshot",
+                    "Delete Snapshot (1)",
+                    "Delete Snapshot (2)",
+                    "Delete Snapshot (3)",
+                    "Delete Snapshot (4)",
+                    "Delete Snapshot (5)",
+                    "Delete Snapshot (6)",
+                    "Delete Snapshot (7)",
+                    "Delete Snapshot (8)",
+                    "Delete Snapshot (9)",
+                    "Delete Snapshot (0)",
+                ),
+                "Load Snapshot (1)",
+                "Load Snapshot (2)",
+                "Load Snapshot (3)",
+                "Load Snapshot (4)",
+                "Load Snapshot (5)",
+                "Load Snapshot (6)",
+                "Load Snapshot (7)",
+                "Load Snapshot (8)",
+                "Load Snapshot (9)",
+                "Load Snapshot (0)",
+            ),
+            (
+                "Playlist Settings",
+                "Disable Click Pause",
+                "Disable Wheel Seek",
+            ),
         ],
-        "player": ["Fullscreen", "Minimize"],
         "program": [
+            "Fullscreen",
+            "Minimize",
+            "---",
             "Add Files",
+            "Add URL(s)",
             "Open Playlist",
             "Save Playlist",
             "Close Playlist",
@@ -121,22 +278,6 @@ SECTIONS = MappingProxyType(
         ],
     }
 )
-
-
-class BigMenuIcons(QProxyStyle):
-    def pixelMetric(self, metric, option, widget):
-        if metric == QStyle.PM_SmallIconSize:
-            return 24
-        return super().pixelMetric(metric, option, widget)
-
-
-def _join_menu_sections(menu_sections):
-    menu = []
-    for m_block in menu_sections:
-        menu.extend(m_block)
-        if m_block != menu_sections[-1]:
-            menu.append("---")
-    return menu
 
 
 class MenuManager(ManagerBase):
@@ -153,9 +294,7 @@ class MenuManager(ManagerBase):
         return True
 
     def make_menu(self):
-        menu = QMenu(self.parent())
-        menu.setStyle(BigMenuIcons())
-        menu.setStyleSheet(MENU_STYLE)
+        menu = CustomMenu(parent=self.parent())
 
         menu_sections = self._menu_sections()
 
@@ -167,32 +306,28 @@ class MenuManager(ManagerBase):
         sections_added = []
 
         if self._ctx.active_block is not None:
-            if self._ctx.active_block.video_driver.is_video_initialized:
-                menu_video = SECTIONS["video_active"] + SECTIONS["video_block"]
-            else:
-                menu_video = SECTIONS["video_block"]
-
-            sections_added.append(menu_video)
-
-            if self._ctx.is_single_mode:
-                sections_added.append(SECTIONS["video_single"])
+            sections_added.append(SECTIONS["video_active"])
 
         if self._ctx.video_blocks:
             sections_added.append(SECTIONS["video_all"])
 
-        sections_added.append(SECTIONS["player"])
         sections_added.append(SECTIONS["program"])
 
         return _join_menu_sections(sections_added)
 
     def _add_menu_items(self, menu, menu_items):
-        for m_item in menu_items:
+        for m_idx, m_item in enumerate(menu_items):
             if isinstance(m_item, tuple):
                 self._add_submenu(m_item, menu)
+
+                if not menu.actions()[-1].menu().actions():
+                    menu.removeAction(menu.actions()[-1])
             elif m_item == "---":
-                menu.addSeparator()
+                is_last_element = m_idx == len(menu_items) - 1
+                _add_separator(menu, is_last_element)
             else:
-                self._add_action(m_item, menu)
+                action = self._ctx.actions[m_item]
+                _add_action(action, menu)
 
     def _add_submenu(self, submenu, menu):
         sub = SUBMENUS[submenu[0]]
@@ -207,14 +342,30 @@ class MenuManager(ManagerBase):
 
         self._add_menu_items(sub_menu, sub_items)
 
-    def _add_action(self, menu_item, menu):
-        action = self._ctx.actions[menu_item]
 
-        if action.isCheckable():
-            action.setChecked(action.is_checked_test())
-        if action.is_switchable:
-            action.setEnabled(action.is_enabled_test())
-        if action.is_dynamic:
-            action.setText(action.value_template.replace("%v", action.value_getter()))
+def _join_menu_sections(menu_sections):
+    menu = []
+    for m_block in menu_sections:
+        menu.extend(m_block)
+        if m_block != menu_sections[-1]:
+            menu.append("---")
+    return menu
 
-        menu.addAction(action)
+
+def _add_separator(menu, is_last_element):
+    is_empty_menu = not menu.actions()
+    is_trailing = not is_empty_menu and menu.actions()[-1].isSeparator()
+
+    if any([is_empty_menu, is_trailing, is_last_element]):
+        return
+
+    menu.addSeparator()
+
+
+def _add_action(action: QDynamicAction, menu: QMenu):
+    if action.is_skipped:
+        return
+
+    action.adapt()
+
+    menu.addAction(action)

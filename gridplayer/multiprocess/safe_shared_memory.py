@@ -31,7 +31,7 @@ class SafeSharedMemory(object):
         self._is_allocator = False
         self._is_cleaned = False
 
-        self.logger = logging.getLogger("SafeSharedMemory")
+        self._log = logging.getLogger(self.__class__.__name__)
 
     @property
     def memory(self):
@@ -71,9 +71,17 @@ class SafeSharedMemory(object):
             return
 
         # https://stackoverflow.com/questions/53339931/properly-discarding-ctypes-pointers-to-mmap-memory-in-python
-        self._ptr = None
-        gc.collect()
+        if self._ptr is not None:
+            self._ptr = None
+            gc.collect()
 
+        self._close_memory()
+
+        if self._is_allocator:
+            self._memory.unlink()
+            self._memory = None
+
+    def _close_memory(self):
         for _ in range(10):
             try:
                 self._memory.close()
@@ -83,11 +91,7 @@ class SafeSharedMemory(object):
                 # or gc is slow
                 # https://github.com/python/cpython/blob/main/Modules/mmapmodule.c
                 # cannot close exported pointers exist
-                self.logger.warning(f"{e}, retrying...")
+                self._log.warning(f"{e}, retrying...")
                 time.sleep(0.1)
                 continue
             break
-
-        if self._is_allocator:
-            self._memory.unlink()
-            self._memory = None

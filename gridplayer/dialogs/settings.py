@@ -1,27 +1,26 @@
 import contextlib
 import logging
-import platform
 import subprocess
 
 from PyQt5.QtCore import QLocale, QUrl
 from PyQt5.QtGui import QDesktopServices, QIcon
 from PyQt5.QtWidgets import QCheckBox, QComboBox, QDialog, QSpinBox
 
-from gridplayer import params_env, utils
 from gridplayer.dialogs.messagebox import QCustomMessageBox
 from gridplayer.dialogs.settings_dialog_ui import Ui_SettingsDialog
-from gridplayer.params_static import (
+from gridplayer.params import env
+from gridplayer.params.static import (
     SUPPORTED_LANGUAGES,
     GridMode,
+    SeekSyncMode,
     VideoAspect,
     VideoDriver,
     VideoRepeat,
 )
 from gridplayer.settings import Settings
+from gridplayer.utils import log_config
 from gridplayer.utils.app_dir import get_app_data_dir
-from gridplayer.utils.misc import qt_connect, translate
-
-logger = logging.getLogger(__name__)
+from gridplayer.utils.qt import qt_connect, translate
 
 VIDEO_DRIVERS_MULTIPROCESS = (
     VideoDriver.VLC_SW,
@@ -57,8 +56,9 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
     def __init__(self, parent):
         super().__init__(parent)
 
+        self._log = logging.getLogger(self.__class__.__name__)
+
         self.setupUi(self)
-        self.ui_customize()
 
         self.settings_map = {
             "player/video_driver": self.playerVideoDriver,
@@ -71,16 +71,20 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             "playlist/grid_mode": self.gridMode,
             "playlist/grid_fit": self.gridFit,
             "playlist/grid_size": self.gridSize,
+            "playlist/shuffle_on_load": self.gridShuffleOnLoad,
             "playlist/save_position": self.playlistSavePosition,
             "playlist/save_state": self.playlistSaveState,
             "playlist/save_window": self.playlistSaveWindow,
-            "playlist/seek_synced": self.playlistSeekSync,
+            "playlist/seek_sync_mode": self.playlistSeekSyncMode,
             "playlist/track_changes": self.playlistTrackChanges,
+            "playlist/disable_click_pause": self.playlistDisableClickPause,
+            "playlist/disable_wheel_seek": self.playlistDisableWheelSeek,
             "video_defaults/aspect": self.videoAspect,
             "video_defaults/repeat": self.repeatMode,
             "video_defaults/random_loop": self.videoRandomLoop,
             "video_defaults/muted": self.videoMuted,
             "video_defaults/paused": self.videoPaused,
+            "video_defaults/stream_quality": self.streamQuality,
             "misc/overlay_hide": self.timeoutOverlayFlag,
             "misc/overlay_timeout": self.timeoutOverlay,
             "misc/mouse_hide": self.timeoutMouseHideFlag,
@@ -90,6 +94,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             "internal/opaque_hw_overlay": self.miscOpaqueHWOverlay,
         }
 
+        self.ui_customize()
         self.ui_fill()
 
         self.ui_connect()
@@ -105,7 +110,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         _set_groupbox_header_bold(self.playerVideoDriverBox)
         _set_groupbox_header_bold(self.languageBox)
 
-        if platform.system() == "Darwin":
+        if env.IS_MACOS:
             self.lay_body.setContentsMargins(4, 0, 0, 0)
             self.horizontalLayout.setContentsMargins(0, 0, 15, 0)  # noqa: WPS432
             self.languageBox.setContentsMargins(0, 0, 15, 0)  # noqa: WPS432
@@ -117,7 +122,15 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
                 "QGroupBox:title{padding: 0 4px 0 3px;margin-left:-5px;}"
             )
 
-        if platform.system() != "Linux":
+            self.lay_boxes.setSpacing(25)  # noqa: WPS432
+
+            combo_boxes = (
+                e for e in self.settings_map.values() if isinstance(e, QComboBox)
+            )
+            for cb in combo_boxes:
+                cb.setMaximumHeight(22)  # noqa: WPS432
+
+        if not env.IS_LINUX:
             self.section_misc.hide()
             self.miscOpaqueHWOverlay.hide()
 
@@ -129,6 +142,8 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self.fill_logLevel()
         self.fill_logLevelVLC()
         self.fill_language()
+        self.fill_streamQuality()
+        self.fill_playlistSeekSyncMode()
 
     def ui_customize_dynamic(self):
         self.driver_selected(self.playerVideoDriver.currentIndex())
@@ -153,14 +168,16 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
     def open_logfile(self):
         log_path = get_app_data_dir() / "gridplayer.log"
 
-        logger.debug(f"Opening log file {log_path}")
+        self._log.debug(f"Opening log file {log_path}")
 
         if not log_path.is_file():
             return QCustomMessageBox.critical(
-                self, self.tr("Error"), self.tr("Log file does not exist!")
+                self,
+                translate("Dialog", "Error"),
+                translate("Error", "Log file does not exist!"),
             )
 
-        if params_env.IS_SNAP:
+        if env.IS_SNAP:
             # https://forum.snapcraft.io/t/xdg-open-or-gvfs-open-qdesktopservices-openurl-file-somelocation-file-txt-wont-open-the-file/16824
             subprocess.call(["xdg-open", log_path])  # noqa: S603, S607
         else:
@@ -168,7 +185,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
 
     def fill_logLevelVLC(self):
         log_levels = {
-            utils.log_config.DISABLED: translate("ErrorLevel", "None"),
+            log_config.DISABLED: translate("ErrorLevel", "None"),
             logging.ERROR: translate("ErrorLevel", "Error"),
             logging.WARNING: translate("ErrorLevel", "Warning"),
             logging.INFO: translate("ErrorLevel", "Info"),
@@ -179,7 +196,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
 
     def fill_logLevel(self):
         log_levels = {
-            utils.log_config.DISABLED: translate("ErrorLevel", "None"),
+            log_config.DISABLED: translate("ErrorLevel", "None"),
             logging.CRITICAL: translate("ErrorLevel", "Critical"),
             logging.ERROR: translate("ErrorLevel", "Error"),
             logging.WARNING: translate("ErrorLevel", "Warning"),
@@ -216,23 +233,26 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         _fill_combo_box(self.gridMode, grid_modes)
 
     def fill_playerVideoDriver(self):
-        if platform.system() == "Darwin":
+        if env.IS_MACOS:
             video_drivers = {
                 VideoDriver.VLC_HW_SP: "{0} <VLC {1}>".format(
-                    self.tr("Hardware SP"), params_env.VLC_VERSION
+                    self.tr("Hardware SP"), env.VLC_VERSION
                 ),
                 VideoDriver.VLC_SW: "{0} <VLC {1}>".format(
-                    self.tr("Software"), params_env.VLC_VERSION
+                    self.tr("Software"), env.VLC_VERSION
                 ),
                 VideoDriver.DUMMY: self.tr("Dummy"),
             }
         else:
             video_drivers = {
                 VideoDriver.VLC_HW: "{0} <VLC {1}>".format(
-                    self.tr("Hardware"), params_env.VLC_VERSION
+                    self.tr("Hardware"), env.VLC_VERSION
+                ),
+                VideoDriver.VLC_HW_SP: "{0} <VLC {1}>".format(
+                    self.tr("Hardware SP"), env.VLC_VERSION
                 ),
                 VideoDriver.VLC_SW: "{0} <VLC {1}>".format(
-                    self.tr("Software"), params_env.VLC_VERSION
+                    self.tr("Software"), env.VLC_VERSION
                 ),
                 VideoDriver.DUMMY: self.tr("Dummy"),
             }
@@ -252,6 +272,41 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         sorted_languages = dict(sorted(languages.items(), key=lambda x: x[1]))
 
         _fill_combo_box(self.language, sorted_languages)
+
+    def fill_streamQuality(self):
+        quality_codes = {
+            "best": self.tr("Best"),
+            "worst": self.tr("Worst"),
+        }
+
+        standard_quality_codes = [
+            "2160p",
+            "2160p60",
+            "1440p",
+            "1440p60",
+            "1080p",
+            "1080p60",
+            "720p60",
+            "720p",
+            "480p",
+            "360p",
+            "240p",
+            "144p",
+        ]
+
+        for code in standard_quality_codes:
+            quality_codes[code] = code
+
+        _fill_combo_box(self.streamQuality, quality_codes)
+
+    def fill_playlistSeekSyncMode(self):
+        seek_modes = {
+            SeekSyncMode.DISABLED: self.tr("Disabled"),
+            SeekSyncMode.PERCENT: self.tr("Percent"),
+            SeekSyncMode.TIMECODE: self.tr("Timecode"),
+        }
+
+        _fill_combo_box(self.playlistSeekSyncMode, seek_modes)
 
     def driver_selected(self, idx):
         driver_id = self.playerVideoDriver.itemData(idx)

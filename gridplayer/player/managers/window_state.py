@@ -2,13 +2,15 @@ import base64
 
 from PyQt5.QtCore import QEvent, Qt, pyqtSignal, pyqtSlot
 
-from gridplayer.params_static import WindowState
+from gridplayer.params.static import WindowState
 from gridplayer.player.managers.base import ManagerBase
 from gridplayer.settings import Settings
+from gridplayer.utils.misc import force_terminate
 
 
 class WindowStateManager(ManagerBase):
     pause_on_minimize = pyqtSignal()
+    closing = pyqtSignal()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -20,7 +22,10 @@ class WindowStateManager(ManagerBase):
 
     @property
     def event_map(self):
-        return {QEvent.WindowStateChange: self.changeEvent}
+        return {
+            QEvent.WindowStateChange: self.changeEvent,
+            QEvent.Close: self.closeEvent,
+        }
 
     @property
     def commands(self):
@@ -44,6 +49,17 @@ class WindowStateManager(ManagerBase):
             for v in self.pre_minimize_unpaused:
                 v.set_pause(False)
             self.pre_minimize_unpaused = []
+
+    def closeEvent(self, event):
+        if not self._ctx.commands.close_playlist():
+            event.ignore()
+            return True
+
+        self.closing.emit()
+
+        self.parent().hide()
+
+        force_terminate()
 
     def cmd_fullscreen(self):
         if self.parent().isFullScreen():

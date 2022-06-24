@@ -4,7 +4,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_SettingsDialog(object):
     def setupUi(self, SettingsDialog):
         SettingsDialog.setObjectName("SettingsDialog")
-        SettingsDialog.resize(442, 541)
+        SettingsDialog.resize(442, 621)
         self.lay_main = QtWidgets.QVBoxLayout(SettingsDialog)
         self.lay_main.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
         self.lay_main.setObjectName("lay_main")
@@ -52,12 +52,28 @@ class Ui_SettingsDialog(object):
         self.playlistSaveState = QtWidgets.QCheckBox(SettingsDialog)
         self.playlistSaveState.setObjectName("playlistSaveState")
         self.lay_section_playlist.addWidget(self.playlistSaveState)
-        self.playlistSeekSync = QtWidgets.QCheckBox(SettingsDialog)
-        self.playlistSeekSync.setObjectName("playlistSeekSync")
-        self.lay_section_playlist.addWidget(self.playlistSeekSync)
         self.playlistTrackChanges = QtWidgets.QCheckBox(SettingsDialog)
         self.playlistTrackChanges.setObjectName("playlistTrackChanges")
         self.lay_section_playlist.addWidget(self.playlistTrackChanges)
+        self.playlistDisableClickPause = QtWidgets.QCheckBox(SettingsDialog)
+        self.playlistDisableClickPause.setObjectName("playlistDisableClickPause")
+        self.lay_section_playlist.addWidget(self.playlistDisableClickPause)
+        self.playlistDisableWheelSeek = QtWidgets.QCheckBox(SettingsDialog)
+        self.playlistDisableWheelSeek.setObjectName("playlistDisableWheelSeek")
+        self.lay_section_playlist.addWidget(self.playlistDisableWheelSeek)
+        self.lay_seek_sync = QtWidgets.QHBoxLayout()
+        self.lay_seek_sync.setObjectName("lay_seek_sync")
+        self.playlistSeekSyncModeLabel = QtWidgets.QLabel(SettingsDialog)
+        self.playlistSeekSyncModeLabel.setObjectName("playlistSeekSyncModeLabel")
+        self.lay_seek_sync.addWidget(self.playlistSeekSyncModeLabel)
+        self.playlistSeekSyncMode = QtWidgets.QComboBox(SettingsDialog)
+        self.playlistSeekSyncMode.setObjectName("playlistSeekSyncMode")
+        self.lay_seek_sync.addWidget(self.playlistSeekSyncMode)
+        spacerItem = QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        )
+        self.lay_seek_sync.addItem(spacerItem)
+        self.lay_section_playlist.addLayout(self.lay_seek_sync)
         self.lay_left_column.addLayout(self.lay_section_playlist)
         self.lay_section_grid = QtWidgets.QVBoxLayout()
         self.lay_section_grid.setObjectName("lay_section_grid")
@@ -76,10 +92,10 @@ class Ui_SettingsDialog(object):
         self.gridMode = QtWidgets.QComboBox(SettingsDialog)
         self.gridMode.setObjectName("gridMode")
         self.lay_gridMode.addWidget(self.gridMode)
-        spacerItem = QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        spacerItem1 = QtWidgets.QSpacerItem(
+            40, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
         )
-        self.lay_gridMode.addItem(spacerItem)
+        self.lay_gridMode.addItem(spacerItem1)
         self.lay_section_grid.addLayout(self.lay_gridMode)
         self.lay_gridSize = QtWidgets.QHBoxLayout()
         self.lay_gridSize.setObjectName("lay_gridSize")
@@ -89,14 +105,17 @@ class Ui_SettingsDialog(object):
         self.gridSizeLabel = QtWidgets.QLabel(SettingsDialog)
         self.gridSizeLabel.setObjectName("gridSizeLabel")
         self.lay_gridSize.addWidget(self.gridSizeLabel)
-        spacerItem1 = QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        spacerItem2 = QtWidgets.QSpacerItem(
+            40, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
         )
-        self.lay_gridSize.addItem(spacerItem1)
+        self.lay_gridSize.addItem(spacerItem2)
         self.lay_section_grid.addLayout(self.lay_gridSize)
         self.gridFit = QtWidgets.QCheckBox(SettingsDialog)
         self.gridFit.setObjectName("gridFit")
         self.lay_section_grid.addWidget(self.gridFit)
+        self.gridShuffleOnLoad = QtWidgets.QCheckBox(SettingsDialog)
+        self.gridShuffleOnLoad.setObjectName("gridShuffleOnLoad")
+        self.lay_section_grid.addWidget(self.gridShuffleOnLoad)
         self.lay_left_column.addLayout(self.lay_section_grid)
         self.lay_section_video_defaults = QtWidgets.QVBoxLayout()
         self.lay_section_video_defaults.setObjectName("lay_section_video_defaults")
@@ -107,6 +126,19 @@ class Ui_SettingsDialog(object):
         self.section_video_defaults.setFont(font)
         self.section_video_defaults.setObjectName("section_video_defaults")
         self.lay_section_video_defaults.addWidget(self.section_video_defaults)
+        self.lay_stream_quality = QtWidgets.QHBoxLayout()
+        self.lay_stream_quality.setObjectName("lay_stream_quality")
+        self.streamQualityLabel = QtWidgets.QLabel(SettingsDialog)
+        self.streamQualityLabel.setObjectName("streamQualityLabel")
+        self.lay_stream_quality.addWidget(self.streamQualityLabel)
+        self.streamQuality = QtWidgets.QComboBox(SettingsDialog)
+        self.streamQuality.setObjectName("streamQuality")
+        self.lay_stream_quality.addWidget(self.streamQuality)
+        spacerItem3 = QtWidgets.QSpacerItem(
+            40, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        )
+        self.lay_stream_quality.addItem(spacerItem3)
+        self.lay_section_video_defaults.addLayout(self.lay_stream_quality)
         self.lay_aspect = QtWidgets.QHBoxLayout()
         self.lay_aspect.setObjectName("lay_aspect")
         self.videoAspectLabel = QtWidgets.QLabel(SettingsDialog)
@@ -115,10 +147,10 @@ class Ui_SettingsDialog(object):
         self.videoAspect = QtWidgets.QComboBox(SettingsDialog)
         self.videoAspect.setObjectName("videoAspect")
         self.lay_aspect.addWidget(self.videoAspect)
-        spacerItem2 = QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        spacerItem4 = QtWidgets.QSpacerItem(
+            40, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
         )
-        self.lay_aspect.addItem(spacerItem2)
+        self.lay_aspect.addItem(spacerItem4)
         self.lay_section_video_defaults.addLayout(self.lay_aspect)
         self.lay_repeat = QtWidgets.QHBoxLayout()
         self.lay_repeat.setObjectName("lay_repeat")
@@ -128,10 +160,10 @@ class Ui_SettingsDialog(object):
         self.repeatMode = QtWidgets.QComboBox(SettingsDialog)
         self.repeatMode.setObjectName("repeatMode")
         self.lay_repeat.addWidget(self.repeatMode)
-        spacerItem3 = QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        spacerItem5 = QtWidgets.QSpacerItem(
+            40, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
         )
-        self.lay_repeat.addItem(spacerItem3)
+        self.lay_repeat.addItem(spacerItem5)
         self.lay_section_video_defaults.addLayout(self.lay_repeat)
         self.videoRandomLoop = QtWidgets.QCheckBox(SettingsDialog)
         self.videoRandomLoop.setObjectName("videoRandomLoop")
@@ -143,13 +175,15 @@ class Ui_SettingsDialog(object):
         self.videoMuted.setObjectName("videoMuted")
         self.lay_section_video_defaults.addWidget(self.videoMuted)
         self.lay_left_column.addLayout(self.lay_section_video_defaults)
-        spacerItem4 = QtWidgets.QSpacerItem(
+        spacerItem6 = QtWidgets.QSpacerItem(
             0, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
-        self.lay_left_column.addItem(spacerItem4)
+        self.lay_left_column.addItem(spacerItem6)
         self.lay_body.addLayout(self.lay_left_column)
         self.lay_right_column = QtWidgets.QVBoxLayout()
         self.lay_right_column.setObjectName("lay_right_column")
+        self.lay_boxes = QtWidgets.QVBoxLayout()
+        self.lay_boxes.setObjectName("lay_boxes")
         self.languageBox = QtWidgets.QGroupBox(SettingsDialog)
         self.languageBox.setObjectName("languageBox")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.languageBox)
@@ -157,7 +191,7 @@ class Ui_SettingsDialog(object):
         self.language = QtWidgets.QComboBox(self.languageBox)
         self.language.setObjectName("language")
         self.verticalLayout.addWidget(self.language)
-        self.lay_right_column.addWidget(self.languageBox)
+        self.lay_boxes.addWidget(self.languageBox)
         self.playerVideoDriverBox = QtWidgets.QGroupBox(SettingsDialog)
         self.playerVideoDriverBox.setObjectName("playerVideoDriverBox")
         self.lay_playerVideoDriverBox = QtWidgets.QVBoxLayout(self.playerVideoDriverBox)
@@ -177,7 +211,8 @@ class Ui_SettingsDialog(object):
         self.lay_playerVideoDriverPlayers.addWidget(self.playerVideoDriverPlayers)
         self.lay_playerVideoDriverPlayers.setStretch(0, 1)
         self.lay_playerVideoDriverBox.addLayout(self.lay_playerVideoDriverPlayers)
-        self.lay_right_column.addWidget(self.playerVideoDriverBox)
+        self.lay_boxes.addWidget(self.playerVideoDriverBox)
+        self.lay_right_column.addLayout(self.lay_boxes)
         self.lay_section_timeouts = QtWidgets.QVBoxLayout()
         self.lay_section_timeouts.setObjectName("lay_section_timeouts")
         self.section_timeouts = QtWidgets.QLabel(SettingsDialog)
@@ -255,10 +290,10 @@ class Ui_SettingsDialog(object):
         self.lay_section_misc = QtWidgets.QVBoxLayout()
         self.lay_section_misc.setObjectName("lay_section_misc")
         self.lay_right_column.addLayout(self.lay_section_misc)
-        spacerItem5 = QtWidgets.QSpacerItem(
+        spacerItem7 = QtWidgets.QSpacerItem(
             0, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
-        self.lay_right_column.addItem(spacerItem5)
+        self.lay_right_column.addItem(spacerItem7)
         self.lay_body.addLayout(self.lay_right_column)
         self.lay_body.setStretch(0, 1)
         self.lay_main.addLayout(self.lay_body)
@@ -309,11 +344,17 @@ class Ui_SettingsDialog(object):
         self.playlistSaveState.setText(
             _translate("SettingsDialog", "Save videos playing / paused status")
         )
-        self.playlistSeekSync.setText(
-            _translate("SettingsDialog", "Synchronize seek by default")
-        )
         self.playlistTrackChanges.setText(
             _translate("SettingsDialog", "Warn about unsaved changes")
+        )
+        self.playlistDisableClickPause.setText(
+            _translate("SettingsDialog", "Disable pause with left mouse click")
+        )
+        self.playlistDisableWheelSeek.setText(
+            _translate("SettingsDialog", "Disable seek with mouse wheel")
+        )
+        self.playlistSeekSyncModeLabel.setText(
+            _translate("SettingsDialog", "Seek sync mode")
         )
         self.section_grid.setText(
             _translate("SettingsDialog", "Default Grid Parameters")
@@ -321,9 +362,11 @@ class Ui_SettingsDialog(object):
         self.gridModeLabel.setText(_translate("SettingsDialog", "Grid mode"))
         self.gridSizeLabel.setText(_translate("SettingsDialog", "Grid size"))
         self.gridFit.setText(_translate("SettingsDialog", "Fit grid cells"))
+        self.gridShuffleOnLoad.setText(_translate("SettingsDialog", "Shuffle on load"))
         self.section_video_defaults.setText(
             _translate("SettingsDialog", "Default Video Parameters")
         )
+        self.streamQualityLabel.setText(_translate("SettingsDialog", "Stream quality"))
         self.videoAspectLabel.setText(_translate("SettingsDialog", "Aspect mode"))
         self.repeatModeLabel.setText(_translate("SettingsDialog", "Repeat mode"))
         self.videoRandomLoop.setText(

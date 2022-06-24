@@ -1,76 +1,54 @@
-import logging
-import os
 from pathlib import Path
-from typing import List, Set
+from typing import List, Optional, Union
 
 from PyQt5.QtCore import QMimeData
 
-from gridplayer.params_static import SUPPORTED_VIDEO_EXT
-
-logger = logging.getLogger(__name__)
-
-
-def drag_has_video_id(dnd_data: QMimeData):
-    return dnd_data.hasFormat("application/x-gridplayer-video-id")
+from gridplayer.models.video import VideoBlockMime
+from gridplayer.utils.misc import is_url
 
 
-def drag_get_video_id(dnd_data: QMimeData):
-    return bytes(dnd_data.data("application/x-gridplayer-video-id")).decode()
+def drag_has_video(dnd_data: QMimeData) -> bool:
+    return dnd_data.hasFormat("application/x-gridplayer-video")
 
 
-def drag_get_files(dnd_data: QMimeData) -> List[Path]:
-    return filter_valid_files(_exctract_local_files(dnd_data))
+def drag_get_video(dnd_data: QMimeData) -> Optional[VideoBlockMime]:
+    if not drag_has_video(dnd_data):
+        return None
+
+    return VideoBlockMime.parse_raw(
+        bytes(dnd_data.data("application/x-gridplayer-video")).decode("utf-8")
+    )
 
 
-def _exctract_local_files(dnd_data: QMimeData) -> List[Path]:
-    files = []
-
-    if not dnd_data.hasUrls():
-        return []
-
-    for url in dnd_data.urls():
-        if not url.isLocalFile():
-            logger.warning(f"{url} is not a local file!")
-            continue
-
-        files.append(Path(url.toLocalFile()))
-
-    return files
+def drag_get_uris(dnd_data: QMimeData) -> List[str]:
+    return _extract_uris(dnd_data)
 
 
-def filter_valid_files(files: List[Path]):
-    files = _filter_accesible_files(files)
+def _extract_uris(dnd_data: QMimeData) -> List[str]:
+    uris = []
 
-    if not files:
-        return []
+    if dnd_data.hasUrls():
+        for url in dnd_data.urls():
+            if url.isLocalFile():
+                uris.append(url.toLocalFile())
+            else:
+                uris.append(url.url())
 
-    if len(files) == 1 and _filter_extensions(files, {"gpls"}):
-        return files
+    elif dnd_data.hasText():
+        dnd_text = dnd_data.text().splitlines()
+        uris = [line.strip() for line in dnd_text if line.strip()]
 
-    if _filter_extensions(files, {"gpls"}):
-        logger.warning("Only single playlist file can be opened at a time!")
-        return []
-
-    video_files = _filter_extensions(files, SUPPORTED_VIDEO_EXT)
-
-    for f in set(files) - set(video_files):
-        logger.warning(f"{f} is not supported!")
-
-    return video_files
+    return _filter_uris(uris)
 
 
-def _filter_accesible_files(files: List[Path]) -> List[Path]:
-    filtered = []
-
-    for f in files:
-        if not (f.is_file() and os.access(f, os.R_OK)):
-            logger.warning(f"{f} file is not accessible!")
-            continue
-
-        filtered.append(f)
-
-    return filtered
+def _filter_uris(uris: List[str]) -> List[str]:
+    return [u for u in uris if is_url(u) or Path(u).is_file()]
 
 
-def _filter_extensions(files: List[Path], extensions: Set[str]):
-    return [f for f in files if f.suffix[1:].lower() in extensions]
+def get_playlist_path(uris: List[Union[str, Path]]) -> Optional[Path]:
+    for uri in uris:
+        uri_path = Path(uri)
+        if uri_path.suffix.lower() == ".gpls" and uri_path.is_file():
+            return uri_path
+
+    return None

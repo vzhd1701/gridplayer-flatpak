@@ -19,9 +19,10 @@ class QCustomMessageBox(QMessageBox):
             btn.setIcon(QIcon())
 
         icons = {
+            QMessageBox.Critical: QIcon.fromTheme("error"),
             QMessageBox.Information: QIcon.fromTheme("information"),
             QMessageBox.Question: QIcon.fromTheme("question"),
-            QMessageBox.Critical: QIcon.fromTheme("close"),
+            QMessageBox.Warning: QIcon.fromTheme("warning"),
         }
 
         icon_size = 64
@@ -57,6 +58,17 @@ class QCustomMessageBox(QMessageBox):
         title,
         text,
         buttons=QMessageBox.Yes | QMessageBox.No,
+        defaultButton=QMessageBox.NoButton,
+    ):
+        return cls(QMessageBox.Question, title, text, buttons, parent).exec_()
+
+    @classmethod
+    def cancellable_question(
+        cls,
+        parent,
+        title,
+        text,
+        buttons=QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
         defaultButton=QMessageBox.NoButton,
     ):
         return cls(QMessageBox.Question, title, text, buttons, parent).exec_()

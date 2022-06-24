@@ -1,18 +1,22 @@
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QCursor, QPainter
+from abc import ABC, abstractmethod
+
+from PyQt5.QtCore import QPropertyAnimation, Qt, pyqtProperty, pyqtSignal
+from PyQt5.QtGui import QColor, QCursor, QPainter
 from PyQt5.QtWidgets import qApp
 
+from gridplayer.utils.qt import QABC
 from gridplayer.widgets.video_overlay_elements import OverlayWidget
 from gridplayer.widgets.video_overlay_icons import (
     draw_cross,
     draw_pause,
     draw_play,
+    draw_spin_circle,
     draw_volume_off,
     draw_volume_on,
 )
 
 
-class OverlayButton(OverlayWidget):
+class OverlayButton(OverlayWidget, metaclass=QABC):
     clicked = pyqtSignal()
 
     def __init__(self, **kwargs):
@@ -25,11 +29,13 @@ class OverlayButton(OverlayWidget):
 
         self._is_off = False
 
-    def icon(self):
-        raise NotImplementedError
+    @abstractmethod
+    def icon(self, rect, painter, color_fg, color_bg):
+        ...
 
-    def icon_off(self):
-        raise NotImplementedError
+    @abstractmethod
+    def icon_off(self, rect, painter, color_fg, color_bg):
+        ...
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -43,10 +49,13 @@ class OverlayButton(OverlayWidget):
 
         painter.fillRect(self.rect(), color_bg)
 
+        self.draw_icon(painter, color_fg, color_bg)
+
+    def draw_icon(self, painter: QPainter, color_fg: QColor, color_bg: QColor):
         if self._is_off:
-            self.icon_off(self.rect(), painter, color_fg)
+            self.icon_off(self.rect(), painter, color_fg, color_bg)
         else:
-            self.icon(self.rect(), painter, color_fg)
+            self.icon(self.rect(), painter, color_fg, color_bg)
 
     def underMouse(self):
         return qApp.widgetAt(QCursor.pos()) is self
@@ -91,24 +100,75 @@ class OverlayButton(OverlayWidget):
         self.update()
 
 
+class OverlayButtonDynamic(OverlayButton, ABC):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self._is_in_progress = False
+        self._icon_spin = 0
+
+        self._animation = QPropertyAnimation(self, b"icon_spin")
+        self._animation.setDuration(500)  # noqa: WPS432
+        self._animation.setStartValue(0)
+        self._animation.setEndValue(360)  # noqa: WPS432
+        self._animation.setLoopCount(-1)
+
+    @pyqtProperty(int)
+    def icon_spin(self):
+        return self._icon_spin
+
+    @icon_spin.setter
+    def icon_spin(self, icon_spin):  # noqa: WPS440
+        self._icon_spin = icon_spin
+        self.update()
+
+    def draw_icon(self, painter, color_fg, color_bg):
+        if self._is_in_progress:
+            draw_spin_circle(self.rect(), painter, color_fg, color_bg, self._icon_spin)
+        else:
+            super().draw_icon(painter, color_fg, color_bg)
+
+    @property
+    def is_in_progress(self):
+        return self._is_in_progress
+
+    @is_in_progress.setter
+    def is_in_progress(self, is_in_progress):
+        self._is_in_progress = is_in_progress
+
+        if is_in_progress:
+            self._animation.start()
+        else:
+            self._animation.stop()
+
+        self.update()
+
+    @OverlayButton.is_off.setter
+    def is_off(self, is_off):
+        self.is_in_progress = False
+
+        OverlayButton.is_off.fset(self, is_off)
+
+
 class OverlayExitButton(OverlayButton):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def icon(self, rect, painter, color_fg, color_bg):
+        return draw_cross(rect, painter, color_fg, color_bg)
 
-        self.icon = draw_cross
+    def icon_off(self, rect, painter, color_fg, color_bg):
+        ...
 
 
-class OverlayPlayPauseButton(OverlayButton):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+class OverlayPlayPauseButton(OverlayButtonDynamic):
+    def icon(self, rect, painter, color_fg, color_bg):
+        return draw_play(rect, painter, color_fg, color_bg)
 
-        self.icon = draw_play
-        self.icon_off = draw_pause
+    def icon_off(self, rect, painter, color_fg, color_bg):
+        return draw_pause(rect, painter, color_fg, color_bg)
 
 
 class OverlayVolumeButton(OverlayButton):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def icon(self, rect, painter, color_fg, color_bg):
+        return draw_volume_on(rect, painter, color_fg, color_bg)
 
-        self.icon = draw_volume_on
-        self.icon_off = draw_volume_off
+    def icon_off(self, rect, painter, color_fg, color_bg):
+        return draw_volume_off(rect, painter, color_fg, color_bg)
