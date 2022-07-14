@@ -3,8 +3,8 @@ import logging
 import subprocess
 
 from PyQt5.QtCore import QLocale, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon
-from PyQt5.QtWidgets import QCheckBox, QComboBox, QDialog, QSpinBox
+from PyQt5.QtGui import QDesktopServices, QIcon, QPalette
+from PyQt5.QtWidgets import QCheckBox, QComboBox, QDialog, QLineEdit, QSpinBox
 
 from gridplayer.dialogs.messagebox import QCustomMessageBox
 from gridplayer.dialogs.settings_dialog_ui import Ui_SettingsDialog
@@ -13,6 +13,7 @@ from gridplayer.params.static import (
     SUPPORTED_LANGUAGES,
     GridMode,
     SeekSyncMode,
+    URLResolver,
     VideoAspect,
     VideoDriver,
     VideoRepeat,
@@ -21,6 +22,8 @@ from gridplayer.settings import Settings
 from gridplayer.utils import log_config
 from gridplayer.utils.app_dir import get_app_data_dir
 from gridplayer.utils.qt import qt_connect, translate
+from gridplayer.widgets.language_list import LanguageList
+from gridplayer.widgets.resolver_patterns_list import ResolverPatternsList
 
 VIDEO_DRIVERS_MULTIPROCESS = (
     VideoDriver.VLC_SW,
@@ -63,11 +66,13 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self.settings_map = {
             "player/video_driver": self.playerVideoDriver,
             "player/video_driver_players": self.playerVideoDriverPlayers,
+            "player/video_init_timeout": self.timeoutVideoInit,
             "player/pause_background_videos": self.playerPauseBackgroundVideos,
             "player/pause_minimized": self.playerPauseWhenMinimized,
             "player/inhibit_screensaver": self.playerInhibitScreensaver,
             "player/one_instance": self.playerOneInstance,
-            "player/language": self.language,
+            "player/show_overlay_border": self.playerShowOverlayBorder,
+            "player/language": self.listLanguages,
             "playlist/grid_mode": self.gridMode,
             "playlist/grid_fit": self.gridFit,
             "playlist/grid_size": self.gridSize,
@@ -85,19 +90,28 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             "video_defaults/muted": self.videoMuted,
             "video_defaults/paused": self.videoPaused,
             "video_defaults/stream_quality": self.streamQuality,
+            "video_defaults/auto_reload_timer": self.streamAutoReloadTimer,
             "misc/overlay_hide": self.timeoutOverlayFlag,
             "misc/overlay_timeout": self.timeoutOverlay,
             "misc/mouse_hide": self.timeoutMouseHideFlag,
             "misc/mouse_hide_timeout": self.timeoutMouseHide,
+            "misc/vlc_options": self.miscVLCOptions,
             "logging/log_level": self.logLevel,
             "logging/log_level_vlc": self.logLevelVLC,
+            "logging/log_limit": self.logLimit,
+            "logging/log_limit_size": self.logLimitSize,
+            "logging/log_limit_backups": self.logLimitBackups,
             "internal/opaque_hw_overlay": self.miscOpaqueHWOverlay,
+            "streaming/hls_via_streamlink": self.streamingHLSVIAStreamlink,
+            "streaming/resolver_priority": self.streamingResolverPriority,
+            "streaming/resolver_priority_patterns": self.streamingResolverPriorityPatterns,  # noqa: E501
         }
 
         self.ui_customize()
         self.ui_fill()
 
         self.ui_connect()
+        self.ui_set_limits()
 
         self.load_settings()
 
@@ -107,34 +121,25 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         for btn in self.buttonBox.buttons():
             btn.setIcon(QIcon())
 
+        self.ui_customize_section_index()
+
         _set_groupbox_header_bold(self.playerVideoDriverBox)
-        _set_groupbox_header_bold(self.languageBox)
-
-        if env.IS_MACOS:
-            self.lay_body.setContentsMargins(4, 0, 0, 0)
-            self.horizontalLayout.setContentsMargins(0, 0, 15, 0)  # noqa: WPS432
-            self.languageBox.setContentsMargins(0, 0, 15, 0)  # noqa: WPS432
-            self.lay_playerVideoDriverPlayers.setContentsMargins(3, 0, 2, 0)
-            self.playerVideoDriverBox.setStyleSheet(
-                "QGroupBox:title{padding: 0 4px 0 3px;margin-left:-5px;}"
-            )
-            self.languageBox.setStyleSheet(
-                "QGroupBox:title{padding: 0 4px 0 3px;margin-left:-5px;}"
-            )
-
-            self.lay_boxes.setSpacing(25)  # noqa: WPS432
-
-            combo_boxes = (
-                e for e in self.settings_map.values() if isinstance(e, QComboBox)
-            )
-            for cb in combo_boxes:
-                cb.setMaximumHeight(22)  # noqa: WPS432
 
         if not env.IS_LINUX:
             self.section_misc.hide()
             self.miscOpaqueHWOverlay.hide()
 
-    def ui_fill(self):
+    def ui_customize_section_index(self):
+        font = self.section_index.font()
+        font.setPixelSize(16)  # noqa: WPS432
+        self.section_index.setFont(font)
+
+        pal = self.section_index.palette()
+        col = pal.color(QPalette.Active, QPalette.Text)
+        pal.setColor(QPalette.Disabled, QPalette.Text, col)
+        self.section_index.setPalette(pal)
+
+    def ui_fill(self):  # noqa: WPS213
         self.fill_playerVideoDriver()
         self.fill_gridMode()
         self.fill_videoAspect()
@@ -144,18 +149,33 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self.fill_language()
         self.fill_streamQuality()
         self.fill_playlistSeekSyncMode()
+        self.fill_streamingResolverPriority()
+
+    def ui_set_limits(self):  # noqa: WPS213
+        self.playerVideoDriverPlayers.setRange(1, MAX_VLC_PROCESSES)
+        self.timeoutOverlay.setRange(1, 60)
+        self.timeoutMouseHide.setRange(1, 60)
+        self.logLimitSize.setRange(1, 1024 * 1024)
+        self.logLimitBackups.setRange(1, 1000)
+        self.timeoutVideoInit.setRange(1, 1000)
+
+        self.gridSize.setRange(0, 1000)
+        self.gridSize.setSpecialValueText(translate("Grid Size", "Auto"))
+
+        self.streamAutoReloadTimer.setRange(0, 1000)
+        self.streamAutoReloadTimer.setSpecialValueText(
+            translate("Auto Reload Timer", "Disabled")
+        )
 
     def ui_customize_dynamic(self):
         self.driver_selected(self.playerVideoDriver.currentIndex())
         self.timeoutMouseHide.setEnabled(self.timeoutMouseHideFlag.isChecked())
         self.timeoutOverlay.setEnabled(self.timeoutOverlayFlag.isChecked())
+        self.logLimitSize.setEnabled(self.logLimit.isChecked())
+        self.logLimitBackups.setEnabled(self.logLimit.isChecked())
+        self.streamingWildcardHelp.setVisible(False)
 
-        self.playerVideoDriverPlayers.setRange(1, MAX_VLC_PROCESSES)
-        self.timeoutOverlay.setRange(1, 60)
-        self.timeoutMouseHide.setRange(1, 60)
-
-        self.gridSize.setRange(0, 1000)
-        self.gridSize.setSpecialValueText(self.tr("Auto"))
+        self.switch_page(None)
 
     def ui_connect(self):
         qt_connect(
@@ -163,7 +183,43 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             (self.timeoutMouseHideFlag.stateChanged, self.timeoutMouseHide.setEnabled),
             (self.timeoutOverlayFlag.stateChanged, self.timeoutOverlay.setEnabled),
             (self.logFileOpen.clicked, self.open_logfile),
+            (self.section_index.currentTextChanged, self.switch_page),
+            (self.section_index.itemSelectionChanged, self.keep_index_selection),
+            (self.logLimit.stateChanged, self.logLimitSize.setEnabled),
+            (self.logLimit.stateChanged, self.logLimitBackups.setEnabled),
+            (self.streamingWildcardHelpButton.clicked, self.toggle_wildcard_help),
         )
+
+    def toggle_wildcard_help(self):
+        self.streamingWildcardHelp.setVisible(
+            not self.streamingWildcardHelp.isVisible()
+        )
+
+    def keep_index_selection(self):
+        if not self.section_index.selectedItems():
+            self.section_index.setCurrentItem(self.section_index.currentItem())
+
+    def switch_page(self, page_name):
+        pages_map = {
+            translate("SettingsDialog", "Player"): self.page_general_player,
+            translate("SettingsDialog", "Language"): self.page_general_language,
+            translate("SettingsDialog", "Playlist"): self.page_defaults_playlist,
+            translate("SettingsDialog", "Video"): self.page_defaults_video,
+            translate("SettingsDialog", "Streaming"): self.page_misc_streaming,
+            translate("SettingsDialog", "Logging"): self.page_misc_logging,
+            translate("SettingsDialog", "Advanced"): self.page_misc_advanced,
+        }
+
+        if page_name is None:
+            self.section_index.setCurrentRow(1)
+            return
+
+        page_widget = pages_map.get(page_name)
+
+        if not page_widget:
+            return
+
+        self.section_page.setCurrentWidget(page_widget)
 
     def open_logfile(self):
         log_path = get_app_data_dir() / "gridplayer.log"
@@ -261,17 +317,20 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
 
     def fill_language(self):
         languages = {
-            lang: "{0} ({1})".format(
-                QLocale.languageToString(QLocale(lang).language()),
-                QLocale.countryToString(QLocale(lang).country()),
-            )
-            if lang in {"zh_CN", "zh_TW"}
-            else QLocale.languageToString(QLocale(lang).language())
-            for lang in SUPPORTED_LANGUAGES
+            lang_id: {
+                "language": QLocale(lang_id).nativeLanguageName().title(),
+                "country": QLocale(lang_id).nativeCountryName().title(),
+                "icon": f":/icons/flag_{lang_id}.svg",
+                "author": lang["author"],
+            }
+            for lang_id, lang in SUPPORTED_LANGUAGES.items()
         }
-        sorted_languages = dict(sorted(languages.items(), key=lambda x: x[1]))
+        sorted_languages = dict(
+            sorted(languages.items(), key=lambda x: x[1]["language"])
+        )
 
-        _fill_combo_box(self.language, sorted_languages)
+        for lang_id, lang in sorted_languages.items():
+            self.listLanguages.add_language_row(lang_id, lang)
 
     def fill_streamQuality(self):
         quality_codes = {
@@ -308,6 +367,15 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
 
         _fill_combo_box(self.playlistSeekSyncMode, seek_modes)
 
+    def fill_streamingResolverPriority(self):
+        resolvers = {
+            URLResolver.STREAMLINK: "Streamlink",
+            URLResolver.YT_DLP: "yt-dlp",
+            URLResolver.DIRECT: self.tr("Direct"),
+        }
+
+        _fill_combo_box(self.streamingResolverPriority, resolvers)
+
     def driver_selected(self, idx):
         driver_id = self.playerVideoDriver.itemData(idx)
 
@@ -320,7 +388,10 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         elements_value_set_fun = {
             QCheckBox: lambda e, v: e.setChecked(v),
             QSpinBox: lambda e, v: e.setValue(v),
+            QLineEdit: lambda e, v: e.setText(v),
             QComboBox: _set_combo_box,
+            LanguageList: lambda e, v: e.setValue(v),
+            ResolverPatternsList: lambda e, v: e.setDataRows(v),
         }
 
         for setting, element in self.settings_map.items():
@@ -337,7 +408,10 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         elements_value_read_attr = {
             QCheckBox: "isChecked",
             QSpinBox: "value",
+            QLineEdit: "text",
             QComboBox: "currentData",
+            LanguageList: "value",
+            ResolverPatternsList: "rows_data",
         }
 
         for setting, element in self.settings_map.items():

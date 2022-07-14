@@ -1,19 +1,19 @@
 import logging
 import random
-import re
 import secrets
 from functools import partial
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 from pydantic.color import Color
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QStackedLayout, QWidget
 
-from gridplayer.dialogs.input_dialog import QCustomSpinboxTimeInput
+from gridplayer.dialogs.input_dialog import QCustomSpinboxInput, QCustomSpinboxTimeInput
 from gridplayer.dialogs.rename_dialog import QVideoRenameDialog
 from gridplayer.exceptions import PlayerException
+from gridplayer.models.stream import Streams
 from gridplayer.models.video import (
     MAX_RATE,
     MAX_SCALE,
@@ -60,61 +60,6 @@ class QStackedLayoutFloating(QStackedLayout):
                     widget.setGeometry(rect)
 
 
-class Streams(object):
-    def __init__(self, streams: Optional[Dict[str, str]] = None):
-        if streams:
-            self.streams = streams
-        else:
-            self.streams = {}
-
-    def __len__(self):
-        return len(self.streams)
-
-    def __iter__(self):
-        return iter(self.streams)
-
-    def __reversed__(self):
-        return reversed(self.streams)
-
-    @property
-    def best(self) -> Tuple[str, str]:
-        return list(self.streams.items())[-1]
-
-    @property
-    def worst(self) -> Tuple[str, str]:
-        return list(self.streams.items())[0]
-
-    def by_quality(self, quality: str) -> Tuple[str, str]:
-        if quality == "best":
-            return self.best
-
-        if quality == "worst":
-            return self.worst
-
-        if self.streams.get(quality):
-            return quality, self.streams[quality]
-
-        return self._guess_quality(quality)
-
-    def _guess_quality(self, quality):
-        quality_lines = re.search(r"^(\d+)", quality)
-        if not quality_lines:
-            return self.best
-
-        quality_lines = int(quality_lines.group(1))
-        for quality_code, stream_url in reversed(self.streams.items()):
-            stream_lines = re.search(r"^(\d+)", quality_code)
-            if not stream_lines:
-                continue
-
-            stream_lines = int(stream_lines.group(1))
-
-            if stream_lines <= quality_lines:
-                return quality_code, stream_url
-
-        return self.best
-
-
 def only_initialized(func):
     def wrapper(*args, **kwargs):
         self = args[0]  # noqa: WPS117
@@ -129,6 +74,16 @@ def only_seekable(func):
     def wrapper(*args, **kwargs):
         self = args[0]  # noqa: WPS117
         if self.is_live:
+            return None
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def only_live(func):
+    def wrapper(*args, **kwargs):
+        self = args[0]  # noqa: WPS117
+        if not self.is_live:
             return None
         return func(*args, **kwargs)
 
@@ -176,6 +131,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
     is_muted_change = pyqtSignal(bool)
     info_change = pyqtSignal(str)
     is_in_progress_change = pyqtSignal()
+    is_active_change = pyqtSignal(bool)
 
     def __init__(self, video_driver, context, **kwargs):
         super().__init__(**kwargs)
@@ -191,8 +147,8 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.video_params: Optional[Video] = None
 
         # Runtime Params
-        self.is_error = False
-        self.is_active = False
+        self._is_error = False
+        self._is_active = False
 
         self._title = None
         self._color = None
@@ -211,6 +167,9 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self._in_progress_timer.setSingleShot(True)
         self._in_progress_timer.setInterval(IN_PROGRESS_THRESHOLD_MS)
         self._in_progress_timer.timeout.connect(self.is_in_progress_change)
+
+        self._reload_timer = QTimer(self)
+        self._reload_timer.timeout.connect(self.reload)
 
         self.url_resolver = self.init_url_resolver()
         self.video_driver = self.init_video_driver()
@@ -272,7 +231,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.url_resolver = self.init_url_resolver()
 
     def reset(self):
-        self.is_error = False
+        self._is_error = False
         self.set_status("processing")
 
         self.reset_video_driver()
@@ -301,6 +260,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
             (self.is_in_progress_change, overlay.set_is_in_progress),
             (self.is_muted_change, overlay.set_is_muted),
             (self.info_change, overlay.set_info_label),
+            (self.is_active_change, overlay.set_is_active),
         )
 
         return overlay
@@ -334,13 +294,13 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.overlay_hide_timer.stop()
         self._in_progress_timer.stop()
 
-        self._log.debug(f"Cleaning up resolver {self.id}")
+        self._log.debug(f"{self.id}: cleaning up resolver")
         self.url_resolver.cleanup()
 
-        self._log.debug(f"Cleaning up driver {self.id}")
+        self._log.debug(f"{self.id}: cleaning up driver ")
         self.video_driver.cleanup()
 
-        self._log.debug(f"Cleaning up done {self.id}")
+        self._log.debug(f"{self.id}: cleaning up done")
 
     def video_driver_error(self, error):
         self.update_status(translate("Video Error", error))
@@ -351,12 +311,12 @@ class VideoBlock(QWidget):  # noqa: WPS230
         return self.error()
 
     def error(self):
-        self.is_error = True
+        self._is_error = True
         self.set_status("error")
         self.cleanup()
 
     def network_error(self):
-        self.is_error = True
+        self._is_error = True
         self.set_status("network-error")
         self.cleanup()
 
@@ -374,7 +334,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
     def reload(self):
         self.is_live = False
-        self.is_error = False
+        self._is_error = False
         self.streams = Streams()
         self._title = None
         self._default_title = None
@@ -476,8 +436,63 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.manual_seek("seek", time_ms)
 
+    @only_initialized
+    @only_live
+    def auto_reload_timer(self):
+        time_min = QCustomSpinboxInput.get_int(
+            parent=self.parent(),
+            title=translate(
+                "Dialog - Set auto reload timer", "Set auto reload timer", "Header"
+            ),
+            special_text=translate("Auto Reload Timer", "Disabled"),
+            initial_value=self.video_params.auto_reload_timer_min,
+            _min=0,
+            _max=1000,
+        )
+
+        self.set_auto_reload_timer(time_min)
+
+    @only_initialized
+    @only_live
+    def set_auto_reload_timer(self, time_min):
+        self.video_params.auto_reload_timer_min = time_min
+
+        time_ms = time_min * 60 * 1000
+
+        if time_ms == 0:
+            self._reload_timer.stop()
+            self._reload_timer.setInterval(0)
+            return
+
+        self._reload_timer.setInterval(time_ms)
+        self._reload_timer.start()
+
+    @only_initialized
+    @only_live
+    def get_auto_reload_timer(self):
+        if self.video_params.auto_reload_timer_min == 0:
+            return translate("Auto Reload Timer", "Disabled")
+
+        return "{0} {1}".format(
+            self.video_params.auto_reload_timer_min,
+            translate("Auto Reload Timer", "minute(s)"),
+        )
+
     def is_under_cursor(self):
         return self.rect().contains(self.mapFromGlobal(QCursor.pos()))
+
+    @property
+    def is_active(self):
+        return self._is_active
+
+    @is_active.setter
+    def is_active(self, is_active):
+        self._is_active = is_active
+
+        if is_active and not Settings().get("player/show_overlay_border"):
+            return
+
+        self.is_active_change.emit(is_active)
 
     @property
     def drag_data(self):
@@ -623,6 +638,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.set_rate(snapshot.rate, is_silent=True)
 
         self.switch_stream_quality(snapshot.stream_quality)
+        self.set_auto_reload_timer(snapshot.auto_reload_timer_min)
 
         self.video_params = snapshot.copy()
 
@@ -653,7 +669,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
         if self.video_params.title is None:
             self.title = video.title
 
-        self.streams = Streams(video.urls)
+        self.streams = video.streams
         self.is_live = video.is_live
 
         self.load_stream_quality(self.video_params.stream_quality)
@@ -668,9 +684,14 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.load_stream_quality(quality)
 
     def load_stream_quality(self, quality: str):
-        quality, url = self.streams.by_quality(quality)
+        quality, stream = self.streams.by_quality(quality)
 
         self.video_params.stream_quality = quality
+
+        if stream.protocol == "direct":
+            url = stream.url
+        else:
+            url = self._ctx.commands.add_stream(stream)
 
         self.load_video.emit(
             MediaInput(
@@ -702,6 +723,8 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.set_loop_start_time(self.video_params.loop_start)
         self.set_loop_end_time(self.video_params.loop_end)
         self.set_rate(self.video_params.rate, is_silent=True)
+
+        self.set_auto_reload_timer(self.video_params.auto_reload_timer_min)
 
         self.video_status.hide()
         self.show_overlay()

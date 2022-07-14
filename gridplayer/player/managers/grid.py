@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout
 from gridplayer.dialogs.input_dialog import QCustomSpinboxInput
 from gridplayer.models.grid_state import GridState
 from gridplayer.params.static import (
-    PLAYER_INFO_TEXT_SIZE,
+    FONT_SIZE_BIG_INFO,
     PLAYER_INITIAL_SIZE,
     PLAYER_MIN_VIDEO_SIZE,
     GridMode,
@@ -65,7 +65,7 @@ class GridManager(ManagerBase):
         )
         self._info_label.setAlignment(Qt.AlignCenter)
         self._info_label.setWordWrap(True)
-        font = QFont("Hack", PLAYER_INFO_TEXT_SIZE, QFont.Bold)
+        font = QFont("Hack", FONT_SIZE_BIG_INFO, QFont.Bold)
         self._info_label.setFont(font)
 
     def init(self):
@@ -141,12 +141,12 @@ class GridManager(ManagerBase):
 
     def cmd_ask_grid_size(self):
         size = QCustomSpinboxInput.get_int(
-            self.parent(),
-            translate("Dialog - Set grid size", "Set grid size", "Header"),
-            translate("Grid Size", "Auto"),
-            self._grid_size,
-            0,
-            1000,
+            parent=self.parent(),
+            title=translate("Dialog - Set grid size", "Set grid size", "Header"),
+            special_text=translate("Grid Size", "Auto"),
+            initial_value=self._grid_size,
+            _min=0,
+            _max=1000,
         )
 
         if self._grid_size == size:

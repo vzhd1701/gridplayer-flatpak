@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from types import MappingProxyType
 from typing import NamedTuple
 
 from gridplayer.params import env
@@ -10,10 +11,8 @@ PLAYER_MIN_VIDEO_SIZE = (100, 90)
 
 OVERLAY_ACTIVITY_EVENT = 2000
 
-if env.IS_MACOS:
-    PLAYER_INFO_TEXT_SIZE = 24
-else:
-    PLAYER_INFO_TEXT_SIZE = 16
+FONT_SIZE_MAIN = 12 if env.IS_MACOS else 9  # noqa: WPS432
+FONT_SIZE_BIG_INFO = 22 if env.IS_MACOS else 16  # noqa: WPS432
 
 
 class AutoName(Enum):
@@ -51,14 +50,22 @@ class SeekSyncMode(AutoName):
     TIMECODE = auto()
 
 
+class URLResolver(AutoName):
+    STREAMLINK = auto()
+    YT_DLP = auto()
+    DIRECT = auto()
+
+
 class WindowState(NamedTuple):
     is_maximized: bool
     is_fullscreen: bool
     geometry: str
 
 
-SUPPORTED_LANGUAGES = (
-    "en_US",
-    "hu_HU",
-    "ru_RU",
+SUPPORTED_LANGUAGES = MappingProxyType(
+    {
+        "en_US": {"author": None},
+        "ru_RU": {"author": None},
+        "hu_HU": {"author": "samu112"},
+    }
 )

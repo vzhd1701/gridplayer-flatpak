@@ -1,8 +1,10 @@
 import ctypes
 import logging
 import platform
+import shlex
 import warnings
 from pathlib import Path
+from typing import Iterator
 
 import certifi
 
@@ -110,7 +112,10 @@ class InstanceVLC(object):
             "--no-mouse-events",
             # "--http-reconnect",
             *self.vlc_options,
+            *_iter_settings_options(),
         ]
+
+        self._logger.debug(f"VLC init options: {options}")
 
         if _is_plugin_cache_exists():
             self._logger.debug("Using plugin cache")
@@ -187,10 +192,10 @@ class InstanceVLC(object):
 
         # Format given fmt/args pair
         str_len = vsnprintf(self._logger_buf, self._logger_buf_len, fmt, args)
-        log_txt = self._logger_buf.raw[:str_len].decode()
+        log_txt = self._logger_buf.raw[:str_len].decode(errors="ignore")
 
-        log_head = f"{m_file.decode()}:{m_line}"
-        log_msg = f"{m_name.decode()}: {log_txt}"
+        log_head = f"{m_file.decode(errors='ignore')}:{m_line}"
+        log_msg = f"{m_name.decode(errors='ignore')}: {log_txt}"
 
         return log_head, log_msg
 
@@ -216,10 +221,35 @@ class ProcessManagerVLC(ProcessManager):
         return instance
 
 
-def _is_plugin_cache_exists():
+def _is_plugin_cache_exists() -> bool:
     if vlc.plugin_path is None:
         return False
 
     plugin_cache_path = Path(vlc.plugin_path) / "plugins.dat"
 
     return plugin_cache_path.is_file()
+
+
+def _iter_settings_options() -> Iterator[str]:  # noqa: WPS231
+    options = shlex.split(Settings().sync_get("misc/vlc_options"))
+
+    for opt_idx, opt in enumerate(options):
+        if not opt.startswith("-"):
+            continue
+
+        if opt_idx + 1 < len(options):
+            next_opt = options[opt_idx + 1]
+        else:
+            next_opt = None
+
+        # --option=value
+        if "=" in opt:
+            yield opt
+
+        # --option value
+        elif next_opt and not next_opt.startswith("-"):
+            yield f"{opt}={next_opt}"
+
+        # --flag
+        else:
+            yield opt

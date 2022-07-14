@@ -54,6 +54,7 @@ class SettingsManager(ManagerBase):
             "player/video_driver",
             "player/video_driver_players",
             "internal/opaque_hw_overlay",
+            "misc/vlc_options",
         }
 
         return self._setting_changes(previous_settings, checks)
@@ -61,6 +62,9 @@ class SettingsManager(ManagerBase):
     def _is_restart_needed(self, previous_settings):
         checks = {
             "player/language",
+            "logging/log_limit",
+            "logging/log_limit_size",
+            "logging/log_limit_backups",
         }
 
         return self._setting_changes(previous_settings, checks)

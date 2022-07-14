@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QApplication, QStyleFactory
 from gridplayer.main.init_icons import init_icon, switch_icon_theme
 from gridplayer.main.init_resources import init_resources
 from gridplayer.main.init_translator import init_translator
-from gridplayer.params import env
+from gridplayer.params.static import FONT_SIZE_MAIN
 
 
 def init_app():
@@ -17,8 +17,7 @@ def init_app():
 
     init_resources()
 
-    if env.IS_LINUX:
-        app.setStyle(QStyleFactory.create("Fusion"))
+    app.setStyle(QStyleFactory.create("Fusion"))
 
     app.setAttribute(Qt.AA_DisableWindowContextHelpButton)
     app.styleHints().setShowShortcutsInContextMenus(True)
@@ -27,8 +26,7 @@ def init_app():
 
     init_icon(app)
 
-    font_size = app.font().pointSize() if env.IS_MACOS else 9
-    app.setFont(QFont("Hack", font_size, QFont.Normal))
+    app.setFont(QFont("Hack", FONT_SIZE_MAIN))
 
     init_translator(app)
 
