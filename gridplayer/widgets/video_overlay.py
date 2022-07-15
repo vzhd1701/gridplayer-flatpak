@@ -95,14 +95,16 @@ class OverlayBlock(QWidget):  # noqa: WPS230
         layout_main.setContentsMargins(0, 0, 0, 0)
         layout_main.setStackingMode(QStackedLayout.StackAll)
 
-        control_widget = QWidget(self)
+        self.control_widget = QWidget(self)
+        self.control_widget.setMouseTracking(True)
+
         self.border_widget = OverlayBorder(parent=self)
         self.border_widget.hide()
 
-        layout_control = QVBoxLayout(control_widget)
+        layout_control = QVBoxLayout(self.control_widget)
         layout_control.setContentsMargins(10, 10, 10, 10)
 
-        layout_main.addWidget(control_widget)
+        layout_main.addWidget(self.control_widget)
         layout_main.addWidget(self.border_widget)
 
         self.top_bar = QVBoxLayout()
@@ -334,13 +336,25 @@ class OverlayBlockFloating(OverlayBlock):
         self.move_to_parent()
 
         if self.is_opaque:
-            mask = self.childrenRegion()
             # 0 coord to keep children from sliding off
-            mask = mask.united(QRegion(QRect(0, 0, 1, 1)))
+            mask = QRegion(QRect(0, 0, 1, 1))
+
+            if self.border_widget.isVisible():
+                frame_width = 5
+                frame = QRegion(self.rect())
+                frame -= QRegion(
+                    QRect(
+                        frame_width,
+                        frame_width,
+                        self.width() - frame_width * 2,
+                        self.height() - frame_width * 2,
+                    )
+                )
+                mask = mask.united(frame)
+
+            mask = mask.united(self.control_widget.childrenRegion())
 
             self.setMask(mask)
-
-        event.ignore()
 
     def move_to_parent(self):
         new_pos = self.parent().mapToGlobal(QPoint())
@@ -376,3 +390,37 @@ class OverlayBlockFloating(OverlayBlock):
             self.parent().window().filter_event(event)
 
         return super().event(event)
+
+
+class OverlayFakeInvisible(OverlayBlockFloating):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._is_visible = False
+
+    def show(self):
+        if not self.isVisible():
+            super().show()
+
+        self._is_visible = True
+
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.update()
+
+    def hide(self):
+        self._is_visible = False
+
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.update()
+
+    def paintEvent(self, event):
+        if not self._is_visible and self.windowOpacity() != 0:
+            self.setMask(QRegion(0, 0, 1, 1))
+            self.setWindowOpacity(0)
+            return
+
+        if self.windowOpacity() == 0:
+            self.clearMask()
+            self.setWindowOpacity(1)
+
+        super().paintEvent(event)
