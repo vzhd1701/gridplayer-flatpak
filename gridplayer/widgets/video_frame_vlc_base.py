@@ -9,9 +9,11 @@ from PyQt5.QtWidgets import QLabel, QStackedLayout, QWidget
 
 from gridplayer.params.static import VideoAspect
 from gridplayer.utils.qt import QABC, QT_ASPECT_MAP, qt_connect
-from gridplayer.vlc_player.static import MediaInput, MediaTrack
+from gridplayer.vlc_player.static import Media, MediaInput
 from gridplayer.vlc_player.video_driver_base import VLCVideoDriver
 from gridplayer.widgets.video_status import VideoStatus
+
+DEFAULT_FPS = 25.0
 
 
 class PauseSnapshot(QLabel):
@@ -54,7 +56,6 @@ class PauseSnapshot(QLabel):
 class VideoFrameVLC(QWidget, metaclass=QABC):
     time_changed = pyqtSignal(int)
     playback_status_changed = pyqtSignal(bool)
-    end_reached = pyqtSignal()
 
     video_ready = pyqtSignal()
 
@@ -75,7 +76,7 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
         self._is_status_change_in_progress = False
         self._is_cleanup_requested = False
 
-        self.media_track: Optional[MediaTrack] = None
+        self.media: Optional[Media] = None
 
         self.ui_setup()
 
@@ -96,19 +97,35 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
 
     @property
     def length(self) -> int:
-        return self.media_track.length
+        return self.media.length
 
     @property
     def is_live(self) -> bool:
-        return self.media_track.is_live
+        return self.media.is_live
 
     @property
     def is_live_video(self) -> bool:
-        return not self.media_track.is_audio_only and self.media_track.is_live
+        return not self.media.is_audio_only and self.media.is_live
 
     @property
     def is_video_initialized(self) -> bool:
-        return self.media_track is not None
+        return self.media is not None
+
+    @property
+    def video_tracks(self):
+        return self.media.video_tracks
+
+    @property
+    def cur_video_track_id(self) -> Optional[int]:
+        return self.media.cur_video_track_id
+
+    @property
+    def audio_tracks(self):
+        return self.media.audio_tracks
+
+    @property
+    def cur_audio_track_id(self) -> Optional[int]:
+        return self.media.cur_audio_track_id
 
     @abstractmethod
     def driver_setup(self) -> VLCVideoDriver:
@@ -124,7 +141,6 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
                 self.video_driver.playback_status_changed,
                 self.playback_status_changed_emit,
             ),
-            (self.video_driver.end_reached, self.end_reached_emit),
             (self.video_driver.time_changed, self.time_changed_emit),
             (self.video_driver.load_finished, self.load_video_finish),
             (self.video_driver.snapshot_taken, self.snapshot_taken),
@@ -172,7 +188,7 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
 
         self._is_cleanup_requested = True
 
-        self.media_track = None
+        self.media = None
 
         self.video_driver.cleanup()
 
@@ -183,7 +199,7 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
         if not self.is_video_initialized:
             return False
 
-        if self.media_track.is_audio_only:
+        if self.media.is_audio_only:
             return True
 
         if self.is_live:
@@ -204,9 +220,6 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
 
         self.playback_status_changed.emit(is_paused)
 
-    def end_reached_emit(self) -> None:
-        self.end_reached.emit()
-
     def time_changed_emit(self, new_time) -> None:
         self.time_changed.emit(new_time)
 
@@ -216,10 +229,10 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
 
         self.video_driver.load_video(media_input)
 
-    def load_video_finish(self, media_track: MediaTrack) -> None:
-        self.media_track = media_track
+    def load_video_finish(self, media: Media) -> None:
+        self.media = media
 
-        if self.media_track.is_audio_only:
+        if self.media.is_audio_only:
             self.video_surface.hide()
             self.audio_only_placeholder.show()
         else:
@@ -271,7 +284,12 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
         self.video_driver.set_playback_rate(rate)
 
     def get_ms_per_frame(self) -> int:
-        return int(1000 // self.media_track.fps)
+        if self.media.cur_video_track:
+            fps = self.media.cur_video_track.fps
+        else:
+            fps = DEFAULT_FPS
+
+        return int(1000 / fps)
 
     def audio_set_mute(self, is_muted) -> None:
         self.video_driver.audio_set_mute(is_muted)
@@ -288,6 +306,28 @@ class VideoFrameVLC(QWidget, metaclass=QABC):
         self._scale = scale
 
         self.adjust_view()
+
+    def set_audio_track(self, track_id):
+        self.media.cur_audio_track_id = track_id
+
+        self.video_driver.set_audio_track(track_id)
+
+    def set_video_track(self, track_id):
+        self.media.cur_video_track_id = track_id
+
+        if track_id == -1:
+            self.video_surface.hide()
+            self.audio_only_placeholder.show()
+        else:
+            self.video_surface.show()
+            self.audio_only_placeholder.hide()
+
+        self.video_driver.set_video_track(track_id)
+
+        self.adjust_view()
+
+    def set_audio_channel_mode(self, mode):
+        self.video_driver.set_audio_channel_mode(mode)
 
 
 class VideoFrameVLCProcess(VideoFrameVLC, ABC):

@@ -21,11 +21,12 @@ from gridplayer.models.video import (
     MIN_SCALE,
     Video,
     VideoBlockMime,
-    VideoURL,
 )
+from gridplayer.models.video_uri import VideoURL
 from gridplayer.params.static import (
     OVERLAY_ACTIVITY_EVENT,
     PLAYER_ID_LENGTH,
+    VIDEO_END_LOOP_MARGIN_MS,
     VideoRepeat,
 )
 from gridplayer.settings import Settings
@@ -33,7 +34,7 @@ from gridplayer.utils.next_file import next_video_file, previous_video_file
 from gridplayer.utils.qt import qt_connect, translate
 from gridplayer.utils.url_resolve.static import ResolvedVideo
 from gridplayer.utils.url_resolve.url_resolve import VideoURLResolver
-from gridplayer.vlc_player.static import MediaInput
+from gridplayer.vlc_player.static import DISABLED_TRACK, NO_TRACK, MediaInput
 from gridplayer.widgets.video_frame_vlc_base import VideoFrameVLC
 from gridplayer.widgets.video_overlay import (
     OverlayBlock,
@@ -78,6 +79,16 @@ def only_seekable(func):
     def wrapper(*args, **kwargs):
         self = args[0]  # noqa: WPS117
         if self.is_live:
+            return None
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def only_with_video_tacks(func):
+    def wrapper(*args, **kwargs):
+        self = args[0]  # noqa: WPS117
+        if not self.video_tracks:
             return None
         return func(*args, **kwargs)
 
@@ -136,6 +147,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
     info_change = pyqtSignal(str)
     is_in_progress_change = pyqtSignal()
     is_active_change = pyqtSignal(bool)
+    is_audio_present_change = pyqtSignal(bool)
 
     def __init__(self, video_driver, context, **kwargs):
         super().__init__(**kwargs)
@@ -191,7 +203,6 @@ class VideoBlock(QWidget):  # noqa: WPS230
         qt_connect(
             (video_driver.video_ready, self.load_video_finish),
             (video_driver.time_changed, self.time_changed),
-            (video_driver.end_reached, self.end_reached),
             (video_driver.playback_status_changed, self.playback_status_changed),
             (video_driver.error, self.video_driver_error),
             (video_driver.crash, self.crash),
@@ -204,7 +215,6 @@ class VideoBlock(QWidget):  # noqa: WPS230
     def reset_video_driver(self):
         self.video_driver.video_ready.disconnect()
         self.video_driver.time_changed.disconnect()
-        self.video_driver.end_reached.disconnect()
         self.video_driver.error.disconnect()
         self.video_driver.crash.disconnect()
         self.load_video.disconnect()
@@ -267,6 +277,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
             (self.is_muted_change, overlay.set_is_muted),
             (self.info_change, overlay.set_info_label),
             (self.is_active_change, overlay.set_is_active),
+            (self.is_audio_present_change, overlay.set_volume_button_visible),
         )
 
         return overlay
@@ -292,6 +303,9 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.layout_main.addWidget(self.video_status)
         self.layout_main.addWidget(self.video_driver)
         self.layout_main.addWidget(self.overlay)
+
+        if type(self.overlay) == OverlayBlock:  # noqa: WPS516
+            self.overlay.raise_()
 
     def crash(self, traceback_txt):
         raise PlayerException(traceback_txt)
@@ -419,7 +433,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
     def manual_seek(self, command, *args):
         getattr(self, command)(*args)
 
-        if command in {"next_frame", "previous_frame"}:
+        if command in {"next_frame", "previous_frame"} and self.video_tracks:
             self.sync_paused.emit(True)
 
         self.sync_percent.emit(self.position)
@@ -526,6 +540,44 @@ class VideoBlock(QWidget):  # noqa: WPS230
         return isinstance(self.video_params.uri, Path)
 
     @property
+    def video_tracks(self):
+        return self.video_driver.video_tracks
+
+    @property
+    def audio_tracks(self):
+        return self.video_driver.audio_tracks
+
+    @only_initialized
+    def set_audio_track(self, track_id):
+        if track_id == DISABLED_TRACK and self.video_params.video_track_id in NO_TRACK:
+            self._ctx.commands.warning(
+                translate("Warning", "Cannot disable both video & audio tracks")
+            )
+            return
+
+        self.video_params.audio_track_id = track_id
+        self.video_driver.set_audio_track(track_id)
+
+    @only_initialized
+    def set_video_track(self, track_id):
+        if track_id == DISABLED_TRACK and self.video_params.audio_track_id in NO_TRACK:
+            self._ctx.commands.warning(
+                translate("Warning", "Cannot disable both video & audio tracks")
+            )
+            return
+
+        self.video_params.video_track_id = track_id
+        self.video_driver.set_video_track(track_id)
+
+    @only_initialized
+    def set_audio_channel_mode(self, mode):
+        if not self.audio_tracks:
+            return
+
+        self.video_params.audio_channel_mode = mode
+        self.video_driver.set_audio_channel_mode(mode)
+
+    @property
     def title(self):
         return self._title
 
@@ -572,9 +624,8 @@ class VideoBlock(QWidget):  # noqa: WPS230
     @property
     def loop_end(self):
         if self.video_params.loop_end is None:
-            # Loop end 1000 ms before actual end for seamless loop
-            before_end_gap = 1000
-            return self.video_driver.length - before_end_gap
+            # Loop end margin before actual end for seamless loop
+            return self.video_driver.length - VIDEO_END_LOOP_MARGIN_MS
 
         return self.video_params.loop_end
 
@@ -611,13 +662,6 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.video_params.is_paused = is_paused
         self.is_paused_change.emit(self.video_params.is_paused)
 
-    def end_reached(self):
-        if self.is_live:
-            return
-
-        self.loop_end_action()
-        self.video_driver.set_pause(False)
-
     def loop_end_action(self):
         is_single_file = self.video_params.repeat_mode == VideoRepeat.SINGLE_FILE
 
@@ -637,6 +681,11 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.title = snapshot.title or self._default_title
         self.color = snapshot.color.as_hex()
+
+        self.set_video_track(snapshot.video_track_id)
+        self.set_audio_track(snapshot.audio_track_id)
+
+        self.set_audio_channel_mode(snapshot.audio_channel_mode)
 
         self.set_aspect(snapshot.aspect_mode)
         self.set_muted(snapshot.is_muted)
@@ -670,6 +719,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
                 MediaInput(
                     uri=str(self.video_params.uri),
                     is_live=False,
+                    is_audio_only=False,
                     size=self.size_tuple,
                     video=self.video_params,
                 )
@@ -709,6 +759,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
             MediaInput(
                 uri=url,
                 is_live=self.is_live,
+                is_audio_only=stream.is_audio_only,
                 size=self.size_tuple,
                 video=self.video_params,
             )
@@ -729,6 +780,8 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.color = self.video_params.color.as_hex()
 
+        self.set_audio_channel_mode(self.video_params.audio_channel_mode)
+
         self.set_volume(self.video_params.volume)
         self.set_muted(self.video_params.is_muted)
 
@@ -738,9 +791,21 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.set_auto_reload_timer(self.video_params.auto_reload_timer_min)
 
+        self.video_params.video_track_id = self.video_driver.cur_video_track_id
+        self.video_params.audio_track_id = self.video_driver.cur_audio_track_id
+
+        self.is_audio_present_change.emit(bool(self.audio_tracks))
+
         self.video_status.hide()
         self.show_overlay()
 
+        # Must do this after video is shown to ensure proper initial state (VLC lag)
+        if self.video_params.is_paused:
+            self.seek(self.video_params.current_position)
+
+        self.video_driver.adjust_view()
+
+    @only_with_video_tacks
     def set_aspect(self, aspect):
         self.video_params.aspect_mode = aspect
 
@@ -754,33 +819,40 @@ class VideoBlock(QWidget):  # noqa: WPS230
     def set_loop_start(self):
         self.set_loop_start_time(self.time)
 
+    @only_seekable
     def set_loop_start_time(self, new_time):
-        if new_time == self.video_params.loop_end:
-            return
+        if None not in {self.video_params.loop_end, new_time}:
+            if new_time >= self.video_params.loop_end:
+                return
 
         self.video_params.loop_start = new_time
 
-        self.loop_start_change.emit(new_time / self.video_driver.length)
+        if new_time is None:
+            self.loop_start_change.emit(0)
+        else:
+            self.loop_start_change.emit(new_time / self.video_driver.length)
 
     @only_seekable
     def set_loop_end(self):
         self.set_loop_end_time(self.time)
 
+    @only_seekable
     def set_loop_end_time(self, new_time):
-        if new_time == self.video_params.loop_start:
-            return
+        if None not in {self.video_params.loop_start, new_time}:
+            if new_time <= self.video_params.loop_start:
+                return
 
         self.video_params.loop_end = new_time
 
-        self.loop_end_change.emit(new_time / self.video_driver.length)
+        if new_time is None:
+            self.loop_end_change.emit(100.0)
+        else:
+            self.loop_end_change.emit(new_time / self.video_driver.length)
 
     @only_seekable
     def reset_loop(self):
-        self.video_params.loop_start = None
-        self.video_params.loop_end = None
-
-        self.loop_start_change.emit(0)
-        self.loop_end_change.emit(100.0)
+        self.set_loop_start_time(None)
+        self.set_loop_end_time(None)
 
     @only_seekable
     def set_repeat_mode(self, repeat_mode: VideoRepeat):
@@ -842,18 +914,21 @@ class VideoBlock(QWidget):  # noqa: WPS230
         self.video_driver.set_time(seek_ms)
         self.time = seek_ms
 
-    @only_initialized
+    @only_with_video_tacks
     @only_seekable
+    @only_initialized
     def next_frame(self):
         self.step_frame(1)
 
-    @only_initialized
+    @only_with_video_tacks
     @only_seekable
+    @only_initialized
     def previous_frame(self):
         self.step_frame(-1)
 
-    @only_initialized
+    @only_with_video_tacks
     @only_seekable
+    @only_initialized
     def step_frame(self, frames):
         if not self.video_params.is_paused:
             self.set_pause(True)
@@ -863,6 +938,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.seek_shift_ms(ms_per_frame * frames)
 
+    @only_with_video_tacks
     @only_initialized
     def scale_increase(self):
         self.video_params.scale += 0.1
@@ -870,6 +946,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.set_scale(self.video_params.scale)
 
+    @only_with_video_tacks
     @only_initialized
     def scale_decrease(self):
         self.video_params.scale -= 0.1
@@ -877,10 +954,12 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.set_scale(self.video_params.scale)
 
+    @only_with_video_tacks
     @only_initialized
     def scale_reset(self):
         self.set_scale(1.0)
 
+    @only_with_video_tacks
     @only_initialized
     def set_scale(self, scale, is_silent=False):
         self.video_params.scale = scale
@@ -936,6 +1015,7 @@ class VideoBlock(QWidget):  # noqa: WPS230
     def mute_unmute(self):
         self.set_muted(not self.video_params.is_muted)
 
+    @only_initialized
     def set_muted(self, muted):
         self.video_params.is_muted = muted
 
@@ -943,12 +1023,31 @@ class VideoBlock(QWidget):  # noqa: WPS230
 
         self.is_muted_change.emit(self.video_params.is_muted)
 
+    @only_initialized
     def set_volume(self, percent):
         self.video_params.volume = round(percent, 2)
 
         self.video_driver.audio_set_volume(self.video_params.volume)
 
         self.volume_change.emit(percent)
+
+    @only_initialized
+    def volume_increase(self):
+        self.set_muted(False)
+
+        self.video_params.volume += 0.05  # noqa: WPS432
+        self.video_params.volume = min(round(self.video_params.volume, 2), 1.0)
+
+        self.set_volume(self.video_params.volume)
+
+    @only_initialized
+    def volume_decrease(self):
+        self.set_muted(False)
+
+        self.video_params.volume -= 0.05  # noqa: WPS432
+        self.video_params.volume = max(round(self.video_params.volume, 2), 0)
+
+        self.set_volume(self.video_params.volume)
 
     def play_pause(self):
         self.set_pause(not self.video_params.is_paused)

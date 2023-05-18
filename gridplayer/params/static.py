@@ -1,5 +1,4 @@
 from enum import Enum, auto
-from types import MappingProxyType
 from typing import NamedTuple
 
 from gridplayer.params import env
@@ -13,6 +12,8 @@ OVERLAY_ACTIVITY_EVENT = 2000
 
 FONT_SIZE_MAIN = 12 if env.IS_MACOS else 9  # noqa: WPS432
 FONT_SIZE_BIG_INFO = 22 if env.IS_MACOS else 16  # noqa: WPS432
+
+VIDEO_END_LOOP_MARGIN_MS = 500
 
 
 class AutoName(Enum):
@@ -56,16 +57,18 @@ class URLResolver(AutoName):
     DIRECT = auto()
 
 
+class AudioChannelMode(AutoName):
+    UNSET = auto()
+    STEREO = auto()
+    RSTEREO = auto()
+    LEFT = auto()
+    RIGHT = auto()
+    DOLBYS = auto()
+    HEADPHONES = auto()
+    MONO = auto()
+
+
 class WindowState(NamedTuple):
     is_maximized: bool
     is_fullscreen: bool
     geometry: str
-
-
-SUPPORTED_LANGUAGES = MappingProxyType(
-    {
-        "en_US": {"author": None},
-        "ru_RU": {"author": None},
-        "hu_HU": {"author": "samu112"},
-    }
-)
