@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Iterable, List, Optional
 from uuid import uuid4
 
@@ -5,7 +6,12 @@ from pydantic import UUID4, BaseModel, Field, ValidationError, confloat  # noqa:
 from pydantic.color import Color
 
 from gridplayer.models.video_uri import AbsoluteFilePath, VideoURI, VideoURL
-from gridplayer.params.static import AudioChannelMode, VideoAspect, VideoRepeat
+from gridplayer.params.static import (
+    AudioChannelMode,
+    VideoAspect,
+    VideoRepeat,
+    VideoTransform,
+)
 from gridplayer.settings import default_field
 
 MIN_SCALE = 1.0
@@ -37,6 +43,7 @@ class Video(BaseModel):
     is_paused: bool = default_field("video_defaults/paused")
     scale: confloat(ge=MIN_SCALE, le=MAX_SCALE) = 1.0
     volume: float = 1.0
+    transform: VideoTransform = default_field("video_defaults/transform")
 
     # Streamable
     stream_quality: str = default_field("video_defaults/stream_quality")
@@ -76,8 +83,17 @@ def filter_video_uris(uris: Iterable[str]) -> List[Video]:
         try:
             video = Video(uri=uri)
         except ValidationError:
-            continue
+            try:
+                video = _convert_relative_path(uri)
+            except ValidationError:
+                continue
 
         valid_urls.append(video)
 
     return valid_urls
+
+
+def _convert_relative_path(uri: str) -> Video:
+    uri_relative = Path.cwd() / uri
+
+    return Video(uri=uri_relative)

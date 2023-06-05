@@ -43,8 +43,14 @@ Huge thanks to [every contributor](https://github.com/vzhd1701/gridplayer#transl
 
 ### Windows
 
-[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.0/GridPlayer-0.5.0-win64-install.exe)
-[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.0/GridPlayer-0.5.0-win64-portable.zip)
+[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.1/GridPlayer-0.5.1-win64-install.exe)
+[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.1/GridPlayer-0.5.1-win64-portable.zip)
+
+Via [scoop](https://scoop.sh/):
+
+```shell
+$ scoop install gridplayer
+```
 
 **Compatible with Windows 7, 8, 10, 11.**
 
@@ -52,7 +58,7 @@ Huge thanks to [every contributor](https://github.com/vzhd1701/gridplayer#transl
 
 [![Get it from the Flathub](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_flathub.png)](https://flathub.org/apps/details/com.vzhd1701.gridplayer)
 [![Get it from the Snap Store](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_snap.png)](https://snapcraft.io/gridplayer)
-[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.0/GridPlayer-0.5.0-x86_64.AppImage)
+[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.1/GridPlayer-0.5.1-x86_64.AppImage)
 
 **For better system integration install via Flathub.**
 
@@ -63,12 +69,12 @@ The AppImage was built using Ubuntu Focal Fossa libraries, so compatibility is U
 You may need to set execute permissions on AppImage file in order to run it:
 
 ```shell
-$ chmod +x GridPlayer-0.5.0-x86_64.AppImage
+$ chmod +x GridPlayer-0.5.1-x86_64.AppImage
 ```
 
 ### MacOS
 
-[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.0/GridPlayer.0.5.0.dmg)
+[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.1/GridPlayer.0.5.1.dmg)
 
 **DMG image is not signed.** You will have to add an exception to run this app.
 
@@ -248,6 +254,7 @@ This software was build using
 - [1017346](https://crowdin.com/profile/1017346)
 - [焦新营](https://crowdin.com/profile/j149697726)
 - [loser7788](https://crowdin.com/profile/loser7788)
+- [李凡](https://crowdin.com/profile/lif86060)
 
 ## License
 
