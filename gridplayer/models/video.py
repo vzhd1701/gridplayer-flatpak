@@ -9,13 +9,14 @@ from gridplayer.models.video_uri import AbsoluteFilePath, VideoURI, VideoURL
 from gridplayer.params.static import (
     AudioChannelMode,
     VideoAspect,
+    VideoCrop,
     VideoRepeat,
     VideoTransform,
 )
 from gridplayer.settings import default_field
 
 MIN_SCALE = 1.0
-MAX_SCALE = 3.0
+MAX_SCALE = 10.0
 MIN_RATE = 0.2
 MAX_RATE = 12
 
@@ -42,6 +43,7 @@ class Video(BaseModel):
     is_muted: bool = default_field("video_defaults/muted")
     is_paused: bool = default_field("video_defaults/paused")
     scale: confloat(ge=MIN_SCALE, le=MAX_SCALE) = 1.0
+    crop: VideoCrop = VideoCrop(0, 0, 0, 0)
     volume: float = 1.0
     transform: VideoTransform = default_field("video_defaults/transform")
 

@@ -7,7 +7,12 @@ from types import MappingProxyType
 from typing import Optional
 
 from gridplayer.params import env
-from gridplayer.params.static import VIDEO_END_LOOP_MARGIN_MS, AudioChannelMode
+from gridplayer.params.static import (
+    VIDEO_END_LOOP_MARGIN_MS,
+    AudioChannelMode,
+    VideoCrop,
+    VideoTransform,
+)
 from gridplayer.settings import Settings
 from gridplayer.utils.aspect_calc import calc_crop, calc_resize_scale
 from gridplayer.utils.misc import is_url
@@ -512,10 +517,22 @@ class VlcPlayerBase(ABC):
         if self._media_player is None or self.media is None:
             return 0, 0
 
-        return self._media_player.video_get_size()
+        video_size = self._media_player.video_get_size()
+
+        rotation_transforms = {
+            VideoTransform.ROTATE_90,
+            VideoTransform.ROTATE_270,
+            VideoTransform.TRANSPOSE,
+            VideoTransform.ANTITRANSPOSE,
+        }
+
+        if self.media_input.video.transform in rotation_transforms:
+            return tuple(reversed(video_size))
+
+        return video_size
 
     @only_initialized_player
-    def adjust_view(self, size, aspect, scale):
+    def adjust_view(self, size, aspect, scale, crop):
         if self.media is None:
             # video not loaded yet, video frame resized on init
             if self.media_input:
@@ -524,10 +541,26 @@ class VlcPlayerBase(ABC):
 
         crop_aspect, crop_geometry = calc_crop(self.video_dimensions, size, aspect)
 
+        if crop == VideoCrop(0, 0, 0, 0):
+            crop_geometry_fmt = "{0}:{1}".format(*crop_geometry)
+        else:
+            crop_geometry_fmt = "+{0}+{1}+{2}+{3}".format(*crop)
+
+        self._log.debug(
+            f"size: {size}"
+            f", aspect: {aspect}"
+            f", scale: {scale}"
+            f", crop: {crop}"
+            f", crop_aspect: {crop_aspect}"
+            f", crop_geo: {crop_geometry}"
+            f", crop_geo_fmt: {crop_geometry_fmt}"
+        )
+
         resize_scale = calc_resize_scale(self.video_dimensions, size, aspect, scale)
 
         self._media_player.video_set_aspect_ratio("{0}:{1}".format(*crop_aspect))
-        self._media_player.video_set_crop_geometry("{0}:{1}".format(*crop_geometry))
+        # https://github.com/videolan/vlc/blob/e9eceaed4d838dbd84638bfb2e4bdd08294163b1/src/video_output/display.c#L887
+        self._media_player.video_set_crop_geometry(crop_geometry_fmt)
         self._media_player.video_set_scale(resize_scale)
 
     def _try_set_initial_state(self):
@@ -566,6 +599,7 @@ class VlcPlayerBase(ABC):
             size=self.media_input.size,
             aspect=self.media_input.video.aspect_mode,
             scale=self.media_input.video.scale,
+            crop=self.media_input.video.crop,
         )
 
     def _set_pause_initial(self, is_paused):
