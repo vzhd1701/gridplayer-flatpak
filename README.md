@@ -43,8 +43,8 @@ Huge thanks to [every contributor](https://github.com/vzhd1701/gridplayer#transl
 
 ### Windows
 
-[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.3/GridPlayer-0.5.3-win64-install.exe)
-[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.3/GridPlayer-0.5.3-win64-portable.zip)
+[![Download Windows Installer](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_installer.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.4/GridPlayer-0.5.4-win64-install.exe)
+[![Download Windows Portable](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_windows_portable.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.4/GridPlayer-0.5.4-win64-portable.zip)
 
 Via [scoop](https://scoop.sh/):
 
@@ -58,7 +58,7 @@ $ scoop install gridplayer
 
 [![Get it from the Flathub](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_flathub.png)](https://flathub.org/apps/details/com.vzhd1701.gridplayer)
 [![Get it from the Snap Store](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_snap.png)](https://snapcraft.io/gridplayer)
-[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.3/GridPlayer-0.5.3-x86_64.AppImage)
+[![Download AppImage](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_appimage.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.4/GridPlayer-0.5.4-x86_64.AppImage)
 
 **For better system integration install via Flathub.**
 
@@ -69,12 +69,12 @@ The AppImage was built using Ubuntu Focal Fossa libraries, so compatibility is U
 You may need to set execute permissions on AppImage file in order to run it:
 
 ```shell
-$ chmod +x GridPlayer-0.5.3-x86_64.AppImage
+$ chmod +x GridPlayer-0.5.4-x86_64.AppImage
 ```
 
 ### MacOS
 
-[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.3/GridPlayer.0.5.3.dmg)
+[![Download DMG](https://raw.githubusercontent.com/vzhd1701/gridplayer/master/resources/public/dl_dmg.png)](https://github.com/vzhd1701/gridplayer/releases/download/v0.5.4/GridPlayer.0.5.4.dmg)
 
 **DMG image is not signed.** You will have to add an exception to run this app.
 
@@ -87,15 +87,15 @@ If you get "GridPlayer is damaged and can't be opened" error, run this command i
 $ sudo xattr -rd com.apple.quarantine /Applications/GridPlayer.app
 ```
 
-### PIP
+### [PIPX](https://github.com/pypa/pipx)
 
 ```shell
-$ pip install -U gridplayer
+$ pipx install gridplayer
 ```
 
-**Python 3.8 or later required.**
+**Python 3.10 or later required.**
 
-This type of installation will also require a `vlc` package present in your system.
+This type of installation will also require VLC installed (Windows & Mac) or a `vlc` package (Linux) present in your system.
 Please refer to [VLC official page](https://www.videolan.org/vlc/) for instructions on how to install it.
 
 Some distros (e.g. Ubuntu) might also require `libxcb-xinerama0` package.
@@ -107,11 +107,11 @@ This project uses [poetry](https://python-poetry.org/) for dependency management
 ```shell
 $ git clone https://github.com/vzhd1701/gridplayer.git
 $ cd gridplayer/
-$ poetry install --no-dev
+$ poetry install
 $ poetry run gridplayer
 ```
 
-The same notes about the Python version and external packages from **PIP** installation apply here.
+The same notes about the Python version and external packages from **PIPX** installation apply here.
 
 ## Video Decoder settings
 
