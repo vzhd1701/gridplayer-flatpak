@@ -51,6 +51,7 @@
   </screenshots>
   <url type="homepage">https://github.com/vzhd1701/gridplayer</url>
   <url type="bugtracker">https://github.com/vzhd1701/gridplayer/issues</url>
+  <url type="vcs-browser">https://github.com/vzhd1701/gridplayer</url>
   <releases>
     <release date="2025-11-24" version="0.5.4"/>
   </releases>
